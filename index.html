@@ -1,0 +1,895 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>My Card Binder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#E8EDF3; --sleeve:#F8FAFC; --ink:#18202E; --muted:#5A6577; --line:#C8D1DD;
+  --red:#D52F18; --red-ink:#FFFFFF; --field:#FFFFFF; --ok:#2E7D32;
+  color-scheme:light; box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#121822; --sleeve:#1C2431; --ink:#E7ECF3; --muted:#98A4B7; --line:#2E3A4B;
+    --red:#FF5B3D; --red-ink:#1A0C08; --field:#151C27; --ok:#5DBB63; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#121822; --sleeve:#1C2431; --ink:#E7ECF3; --muted:#98A4B7; --line:#2E3A4B;
+  --red:#FF5B3D; --red-ink:#1A0C08; --field:#151C27; --ok:#5DBB63; color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:inherit}
+[hidden]{display:none!important}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:"Bricolage Grotesque",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  font-size:16px;line-height:1.45;-webkit-text-size-adjust:100%}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--red);outline-offset:2px}
+
+.wrap{max-width:1100px;margin:0 auto;padding:0 14px}
+header.top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:22px 0 8px}
+h1{margin:0;font-size:clamp(2rem,7vw,2.8rem);font-weight:800;letter-spacing:-.03em;line-height:1}
+.count{margin:6px 0 0;color:var(--muted);font-size:.92rem}
+.ghost{background:none;border:1px solid var(--line);border-radius:999px;padding:7px 14px;font-size:.88rem}
+
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-top:6px}
+.tabs button{background:none;border:0;padding:10px 12px;font-size:1rem;color:var(--muted);border-bottom:3px solid transparent;margin-bottom:-1px}
+.tabs button[aria-current="page"]{color:var(--ink);font-weight:600;border-bottom-color:var(--red)}
+
+.toolbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);
+  padding:10px 0;display:flex;flex-wrap:wrap;gap:8px;align-items:center;border-bottom:1px solid var(--line)}
+.filter{flex:1 1 220px;min-width:0;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:9px 12px}
+.seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--field)}
+.seg button{border:0;background:none;padding:9px 11px;font-size:.88rem}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg);font-weight:600}
+.chip{border:1px solid var(--line);background:var(--field);border-radius:999px;padding:8px 12px;font-size:.88rem}
+.chip[aria-pressed="true"]{background:var(--ok);border-color:var(--ok);color:#fff;font-weight:600}
+.add{background:var(--red);color:var(--red-ink);border:0;border-radius:10px;padding:9px 16px;font-weight:600}
+
+.binder{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:10px;padding:14px 0 40px}
+.group{grid-column:1/-1;margin:14px 0 0;font-size:1rem;font-weight:600;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.group:first-child{margin-top:0}
+.group .n{color:var(--muted);font-weight:400;font-size:.85rem}
+.dot{width:12px;height:12px;border-radius:50%;flex:none;border:1px solid rgba(0,0,0,.15);display:inline-block}
+
+.pocket{position:relative;display:block;width:100%;text-align:left;background:var(--sleeve);
+  border:1px solid var(--line);border-radius:9px;padding:6px 6px 9px;box-shadow:inset 0 -3px 0 var(--t,transparent)}
+.pocket .img{position:relative;width:100%;aspect-ratio:63/88;border-radius:5px;background:var(--line);overflow:hidden;display:flex;align-items:center;justify-content:center}
+.pocket .ph{color:var(--muted);font-size:.7rem;text-align:center;padding:4px}
+.pocket img{width:100%;height:100%;object-fit:cover;display:block}
+.pocket .nm{display:block;margin-top:6px;font-weight:600;font-size:.82rem;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pocket .meta{display:block;font-size:.72rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pocket.missing .img{opacity:.38;filter:grayscale(1)}
+.mk{position:absolute;left:4px;bottom:4px;width:21px;height:21px;border-radius:4px;background:#fff;color:#111;
+  font-weight:800;font-size:.74rem;display:grid;place-items:center;border:1.5px solid #111}
+.mk.out{background:#ddd;color:#666;border-color:#888}
+.qty{position:absolute;top:2px;right:2px;background:var(--ink);color:var(--bg);border-radius:999px;font-size:.74rem;font-weight:800;padding:2px 8px}
+.qty.want{background:var(--red);color:var(--red-ink)}
+
+.empty{grid-column:1/-1;text-align:center;padding:50px 10px;color:var(--muted);max-width:34em;margin:0 auto}
+.empty strong{display:block;color:var(--ink);font-size:1.2rem;margin-bottom:6px}
+
+.sets{display:grid;gap:8px;padding:14px 0 40px}
+.setrow{display:grid;gap:6px;text-align:left;width:100%;background:var(--sleeve);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.setrow b{margin-right:6px}
+.bar{display:block;height:8px;background:var(--line);border-radius:4px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--red)}
+.scount{font-size:.85rem;color:var(--muted)}
+
+dialog{border:0;border-radius:16px;padding:0;width:min(600px,94vw);max-height:88vh;background:var(--sleeve);color:var(--ink)}
+dialog.small{width:min(380px,90vw)}
+dialog::backdrop{background:rgba(8,12,20,.6)}
+.dhead{position:sticky;top:0;z-index:2;background:var(--sleeve);display:flex;gap:8px;align-items:center;padding:12px;border-bottom:1px solid var(--line)}
+.dhead h2{margin:0;font-size:1.15rem;flex:1}
+.x{background:none;border:0;font-size:1.5rem;line-height:1;padding:4px 8px;color:var(--muted)}
+.dbody{padding:14px}
+.searchrow{display:flex;gap:8px;flex:1}
+.searchrow input{flex:1;min-width:0;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:9px 12px}
+.addto{display:flex;align-items:center;gap:10px;margin:0 0 10px;font-size:.92rem;color:var(--muted)}
+.status{color:var(--muted);font-size:.9rem;margin:0 0 10px}
+.results{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px}
+
+.detail{display:flex;flex-direction:column;align-items:center;text-align:center}
+.detail .big{width:min(280px,72vw);aspect-ratio:63/88;border-radius:12px;overflow:hidden;background:var(--line)}
+.detail .big img{width:100%;height:100%;object-fit:contain;display:block}
+.detail h3{margin:14px 0 2px;font-size:1.5rem;letter-spacing:-.02em}
+.detail .info{color:var(--muted);margin:2px 0}
+.detail .num{color:var(--ink);font-size:1.15rem;font-weight:600;margin:0}
+.legal{display:inline-block;padding:2px 9px;border-radius:999px;font-size:.78rem;font-weight:600;background:var(--ok);color:#fff;vertical-align:1px}
+.legal.no{background:var(--line);color:var(--ink)}
+.stepper{display:flex;align-items:center;gap:14px;margin:12px 0}
+.stepper button{width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:var(--field);font-size:1.3rem}
+.stepper button:disabled{opacity:.4;cursor:default}
+.stepper output{font-size:1.4rem;font-weight:800;min-width:2.5ch}
+.field{display:block;width:100%;max-width:420px;text-align:left;margin:8px 0}
+.field span{display:block;font-size:.85rem;color:var(--muted);margin-bottom:3px}
+.field input,.field select,.field textarea{width:100%;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:9px 12px}
+.fix{width:100%;max-width:420px;text-align:left;margin:8px 0;color:var(--muted)}
+.fix summary{cursor:pointer;padding:6px 0}
+.actions{display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:10px}
+.remove{background:none;border:0;color:var(--red);text-decoration:underline;padding:8px}
+
+.choices{display:grid;gap:8px}
+.choices button{border:1px solid var(--line);background:var(--field);border-radius:10px;padding:12px;font-weight:600;text-align:left}
+.sub{color:var(--muted);margin:0 0 12px;font-size:.92rem}
+
+.settings p{margin:0 0 12px;color:var(--muted)}
+.settings h3{margin:18px 0 6px;font-size:1rem}
+.settings h3:first-child{margin-top:0}
+.settings .row{display:flex;gap:8px;flex-wrap:wrap}
+.settings .row button,.settings .row label{border:1px solid var(--line);background:var(--field);border-radius:10px;padding:10px 14px;cursor:pointer}
+.settings select{background:var(--field);border:1px solid var(--line);border-radius:10px;padding:9px 12px}
+
+.toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);
+  background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-size:.9rem;font-weight:600;
+  opacity:0;pointer-events:none;transition:opacity .2s;z-index:50;max-width:90vw;text-align:center}
+.toast.on{opacity:1}
+@media (prefers-reduced-motion:reduce){.toast{transition:none}}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>My Card Binder</h1>
+      <p class="count" id="count"></p>
+    </div>
+    <button class="ghost" id="settingsBtn">Settings</button>
+  </header>
+
+  <nav class="tabs" aria-label="Views">
+    <button data-view="binder">Binder</button>
+    <button data-view="want">Want list</button>
+    <button data-view="sets">Sets</button>
+  </nav>
+
+  <div class="toolbar" id="toolbar">
+    <label class="sr" for="filter">Filter cards</label>
+    <input class="filter" id="filter" type="search" placeholder="Filter by name, set, mark, location…" autocomplete="off">
+    <div class="seg" role="group" aria-label="Sort by">
+      <button data-sort="name">Name</button>
+      <button data-sort="type">Type</button>
+      <button data-sort="number">Number</button>
+      <button data-sort="mark">Mark</button>
+    </div>
+    <button class="chip" id="stdBtn" aria-pressed="false">Standard only</button>
+    <button class="add" id="addBtn">Add cards</button>
+  </div>
+
+  <main id="main"></main>
+</div>
+
+<dialog id="addDlg" aria-label="Add cards">
+  <div class="dhead">
+    <form class="searchrow" id="searchForm">
+      <label class="sr" for="q">Card name, number, or set code</label>
+      <input id="q" type="search" placeholder="Pikachu, or MEE 22" autocomplete="off" enterkeyhint="search">
+      <button class="add" type="submit">Search</button>
+    </form>
+    <button class="x" data-close aria-label="Close">×</button>
+  </div>
+  <div class="dbody">
+    <div class="addto">Add to
+      <div class="seg" role="group" aria-label="Add to">
+        <button data-to="binder">Binder</button>
+        <button data-to="want">Want list</button>
+      </div>
+    </div>
+    <p class="status" id="status">Search by name, like Pikachu. Add a number or set code to narrow it down, like Pikachu 25 or MEE 22. Tap a card to add it.</p>
+    <div class="results" id="results"></div>
+  </div>
+</dialog>
+
+<dialog id="detailDlg" aria-label="Card details">
+  <div class="dhead"><h2 id="detailTitle">Card</h2><button class="x" data-close aria-label="Close">×</button></div>
+  <div class="dbody detail" id="detail"></div>
+</dialog>
+
+<dialog id="setDlg" aria-label="Set checklist">
+  <div class="dhead"><h2 id="setTitle">Set</h2><button class="x" data-close aria-label="Close">×</button></div>
+  <div class="dbody">
+    <p class="status" id="setStatus"></p>
+    <div class="addto"><button class="chip" id="missingBtn" aria-pressed="false">Missing only</button></div>
+    <div class="results" id="setGrid"></div>
+  </div>
+</dialog>
+
+<dialog id="chooseDlg" class="small" aria-label="Choose">
+  <div class="dhead"><h2 id="chooseTitle">Choose</h2><button class="x" data-close aria-label="Close">×</button></div>
+  <div class="dbody"><p class="sub" id="chooseSub"></p><div class="choices" id="chooseOpts"></div></div>
+</dialog>
+
+<dialog id="settingsDlg" aria-label="Settings">
+  <div class="dhead"><h2>Settings</h2><button class="x" data-close aria-label="Close">×</button></div>
+  <div class="dbody settings">
+    <h3>Standard format</h3>
+    <p>Cards with this regulation mark or later are marked Standard legal. Change it when the format rotates. Basic Energy is always legal.</p>
+    <label>Oldest legal mark <select id="legalFrom"></select></label>
+    <h3>Card info</h3>
+    <p>Fills in missing set codes, numbers, and regulation marks for cards already in your binder and want list.</p>
+    <div class="row"><button id="refreshBtn">Fill in missing info</button></div>
+    <h3>Backup</h3>
+    <p>Your binder is saved in this browser on this device. Download a backup now and then, and use it to move everything to another phone or computer.</p>
+    <div class="row">
+      <button id="exportBtn">Download backup</button>
+      <label>Restore from backup<input id="importFile" type="file" accept="application/json,.json" class="sr"></label>
+    </div>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+  'use strict';
+  var KEY = 'pokebinder.v2', OLDKEY = 'pokebinder.cards.v1', SORTKEY = 'pokebinder.sort.v1', VIEWKEY = 'pokebinder.view.v1';
+  var PTCG = 'https://api.pokemontcg.io/v2/cards';
+  var SEL = 'id,name,supertype,subtypes,types,number,set,images,rarity,regulationMark,tcgplayer';
+  var TCGDEX = 'https://api.tcgdex.net/v2/en';
+  var TYPE_ORDER = ['Grass','Fire','Water','Lightning','Psychic','Fighting','Darkness','Metal','Fairy','Dragon','Colorless','Trainer','Energy','Other'];
+  var TYPE_COLOR = {Grass:'#4FA83D',Fire:'#E4572E',Water:'#2D8FD5',Lightning:'#F2C100',Psychic:'#A65CC8',
+    Fighting:'#B5652A',Darkness:'#3E4A5C',Metal:'#8C99A6',Fairy:'#E07BB0',Dragon:'#B08A2E',
+    Colorless:'#C9C2B2',Trainer:'#6B7A90',Energy:'#9AA5B4',Other:'#9AA5B4'};
+  var VARIANTS = ['Normal','Holo','Reverse holo'];
+  var BASE = ['cardId','source','name','supertype','subtypes','types','number','printedTotal','setId','setName','setCode','setDate','rarity','mark','img','imgLarge','variants'];
+  var FILL = ['supertype','subtypes','types','number','printedTotal','setId','setName','setCode','setDate','rarity','mark','img','imgLarge','variants'];
+
+  var $ = function(id){ return document.getElementById(id); };
+  function lsGet(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
+  function lsSet(k, v){ try { localStorage.setItem(k, v); } catch(e){} }
+
+  var store = load();
+  var ui = { sort: lsGet(SORTKEY) || 'name', view: lsGet(VIEWKEY) || 'binder', addTo: 'binder', standardOnly: false };
+  var lastResults = [], setsIndex = {}, curSet = null, open = null;
+
+  // ---------- Storage ----------
+  function migrate(c){
+    var o = Object.assign({}, c);
+    if (!o.cardId) o.cardId = o.id;
+    delete o.id;
+    if (!o.variant) o.variant = 'Normal';
+    o.key = o.cardId + '|' + o.variant;
+    if (!o.qty) o.qty = 1;
+    if (!o.source) o.source = String(o.cardId).indexOf('tcgdex:') === 0 ? 'tcgdex' : 'ptcg';
+    return o;
+  }
+  function normalize(s){
+    s = s || {};
+    return { cards: (s.cards || []).filter(function(c){ return c && (c.cardId || c.id) && c.name; }).map(migrate),
+             wants: (s.wants || []).filter(function(c){ return c && c.cardId && c.name; }).map(migrate),
+             settings: Object.assign({ legalFrom: 'H' }, s.settings || {}) };
+  }
+  function load(){
+    var s = null;
+    try { s = JSON.parse(lsGet(KEY) || 'null'); } catch(e){}
+    if (!s){
+      var old = [];
+      try { old = JSON.parse(lsGet(OLDKEY) || '[]'); } catch(e){}
+      s = { cards: Array.isArray(old) ? old : [] };
+    }
+    return normalize(s);
+  }
+  function save(){
+    try { localStorage.setItem(KEY, JSON.stringify(store)); }
+    catch(e){ toast('Couldn\u2019t save. Download a backup to be safe.'); }
+  }
+
+  // ---------- Helpers ----------
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function rawId(cardId){ var s = String(cardId); return s.slice(s.indexOf(':') + 1); }
+  function uniq(a){ return a.filter(function(v, i){ return a.indexOf(v) === i; }); }
+  function cardType(c){
+    if (c.types && c.types.length) return TYPE_ORDER.indexOf(c.types[0]) >= 0 ? c.types[0] : 'Other';
+    if (/trainer/i.test(c.supertype || '')) return 'Trainer';
+    if (/energy/i.test(c.supertype || '')) return 'Energy';
+    return 'Other';
+  }
+  function isLegal(c){
+    if (/energy/i.test(c.supertype || '') && (c.subtypes || []).some(function(s){ return /basic/i.test(s); })) return true;
+    return !!c.mark && c.mark >= store.settings.legalFrom;
+  }
+  function numVal(n){ var m = String(n || '').match(/\d+/); return m ? parseInt(m[0], 10) : 99999; }
+  function pad(s, w){ s = String(s).replace(/^0+(?=\d)/, ''); while (s.length < w) s = '0' + s; return s; }
+  function fmtNum(c){
+    var n = String(c.number || ''), t = c.printedTotal ? String(c.printedTotal) : '';
+    if (!n) return '';
+    if (!t) return n;
+    var w = c.mark ? 3 : t.length;
+    return (/^\d+$/.test(n) ? pad(n, w) : n) + '/' + pad(t, w);
+  }
+  function codeNum(c){ return [c.setCode, fmtNum(c)].filter(Boolean).join(' '); }
+  function baseFields(c){ var o = {}; BASE.forEach(function(k){ if (c[k] !== undefined) o[k] = c[k]; }); return o; }
+  function getJSON(url){
+    var ctl = new AbortController(); var t = setTimeout(function(){ ctl.abort(); }, 15000);
+    return fetch(url, { signal: ctl.signal }).then(function(r){
+      clearTimeout(t);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }, function(e){ clearTimeout(t); throw e; });
+  }
+
+  // ---------- Card data sources ----------
+  function fromPTCG(c){
+    var s = c.set || {}, im = c.images || {}, pr = (c.tcgplayer && c.tcgplayer.prices) || {}, v = [];
+    if (pr.normal) v.push('Normal');
+    if (pr.holofoil || pr.unlimitedHolofoil || pr['1stEditionHolofoil']) v.push('Holo');
+    if (pr.reverseHolofoil) v.push('Reverse holo');
+    return { cardId:'ptcg:' + c.id, source:'ptcg', name:c.name, supertype:c.supertype || '', subtypes:c.subtypes || [],
+      types:c.types || [], number:c.number || '', printedTotal:s.printedTotal || null, setId:s.id || '',
+      setName:s.name || '', setCode:s.ptcgoCode || '', setDate:(s.releaseDate || '').replace(/\//g, '-'),
+      rarity:c.rarity || '', mark:c.regulationMark || '', img:im.small || '', imgLarge:im.large || im.small || '', variants:v };
+  }
+  function ptcgQuery(q, page){
+    return PTCG + '?q=' + encodeURIComponent(q) + '&pageSize=250&page=' + (page || 1) + '&select=' + SEL;
+  }
+  function fetchPTCGAll(q, orderBy){
+    var out = [];
+    function next(p){
+      return getJSON(ptcgQuery(q, p) + (orderBy ? '&orderBy=' + orderBy : '')).then(function(j){
+        var d = j.data || []; out = out.concat(d);
+        return (d.length === 250 && p < 4) ? next(p + 1) : out;
+      });
+    }
+    return next(1).then(function(a){ return a.map(fromPTCG); });
+  }
+  function searchPTCG(p){
+    var parts = [], nm = p.name.replace(/["\\]/g, '');
+    if (nm) parts.push(/[^a-z0-9]/i.test(nm) ? 'name:"' + nm + '"' : 'name:' + nm + '*');
+    if (p.num) parts.push('number:' + (/^\d+$/.test(p.num) ? String(parseInt(p.num, 10)) : p.num));
+    if (p.code) parts.push('set.ptcgoCode:' + p.code);
+    return getJSON(PTCG + '?q=' + encodeURIComponent(parts.join(' ')) + '&pageSize=60&orderBy=-set.releaseDate&select=' + SEL)
+      .then(function(j){ return (j.data || []).map(fromPTCG); });
+  }
+
+  var setCache = {};
+  function tcgdexSet(id){
+    if (!setCache[id]) setCache[id] = getJSON(TCGDEX + '/sets/' + encodeURIComponent(id)).catch(function(){ delete setCache[id]; return null; });
+    return setCache[id];
+  }
+  function setAbbr(set){
+    var ab = set && set.abbreviation;
+    return ab ? (typeof ab === 'string' ? ab : (ab.official || '')) : '';
+  }
+  function fromTCGdexDetail(d, set){
+    var vs = d.variants || {}, v = [];
+    if (vs.normal) v.push('Normal'); if (vs.holo) v.push('Holo'); if (vs.reverse) v.push('Reverse holo');
+    var cc = (set && set.cardCount) || (d.set && d.set.cardCount) || {};
+    return { cardId:'tcgdex:' + d.id, source:'tcgdex', name:d.name, supertype:d.category || '',
+      subtypes: d.category === 'Energy' && d.energyType === 'Normal' ? ['Basic'] : (d.stage ? [d.stage] : []),
+      types:d.types || [], number:d.localId || '', printedTotal:cc.official || null,
+      setId:(d.set && d.set.id) || '', setName:(d.set && d.set.name) || '', setCode:setAbbr(set),
+      setDate:(set && set.releaseDate) || '', rarity:d.rarity || '', mark:d.regulationMark || '',
+      img:d.image ? d.image + '/low.webp' : '', imgLarge:d.image ? d.image + '/high.webp' : '', variants:v };
+  }
+  function completeTCGdex(c){
+    return getJSON(TCGDEX + '/cards/' + encodeURIComponent(rawId(c.cardId))).then(function(d){
+      return tcgdexSet(d.set && d.set.id).then(function(s){ return fromTCGdexDetail(d, s); });
+    }).catch(function(){ return c; });
+  }
+  function searchTCGdex(p){
+    return getJSON(TCGDEX + '/cards?name=' + encodeURIComponent(p.name)).then(function(list){
+      list = list || [];
+      if (p.num) list = list.filter(function(c){ return numVal(c.localId) === numVal(p.num); });
+      return list.slice(0, 60).map(function(c){
+        return { cardId:'tcgdex:' + c.id, source:'tcgdex', name:c.name, number:c.localId || '', types:[], supertype:'',
+          img:c.image ? c.image + '/low.webp' : '', imgLarge:c.image ? c.image + '/high.webp' : '', partial:true };
+      });
+    });
+  }
+
+  // ---------- Adding ----------
+  function addToBinder(card, variant){
+    var key = card.cardId + '|' + variant, ex = store.cards.find(function(x){ return x.key === key; });
+    if (ex) ex.qty++;
+    else store.cards.push(Object.assign(baseFields(card), { variant:variant, key:key, qty:1, location:'', notes:'', added:Date.now() }));
+    var before = store.wants.length;
+    store.wants = store.wants.filter(function(w){ return !(w.cardId === card.cardId && (w.variant === 'Any' || w.variant === variant)); });
+    save();
+    return { qty: ex ? ex.qty : 1, unwanted: before !== store.wants.length };
+  }
+  function addToWants(card, variant){
+    var key = card.cardId + '|' + variant;
+    if (store.wants.some(function(x){ return x.key === key; })) return false;
+    store.wants.push(Object.assign(baseFields(card), { variant:variant, key:key, qty:1, notes:'', added:Date.now() }));
+    save(); return true;
+  }
+  function choose(title, sub, opts){
+    return new Promise(function(resolve){
+      var d = $('chooseDlg'), done = false;
+      $('chooseTitle').textContent = title;
+      $('chooseSub').textContent = sub || '';
+      $('chooseOpts').innerHTML = opts.map(function(o){ return '<button data-v="' + esc(o[0]) + '">' + esc(o[1]) + '</button>'; }).join('');
+      function finish(v){
+        if (done) return; done = true;
+        d.removeEventListener('close', onClose); $('chooseOpts').onclick = null;
+        if (d.open) d.close();
+        resolve(v);
+      }
+      function onClose(){ if (!d.open) finish(null); }
+      d.addEventListener('close', onClose);
+      $('chooseOpts').onclick = function(e){ var b = e.target.closest('[data-v]'); if (b) finish(b.dataset.v); };
+      d.showModal();
+    });
+  }
+  function pickAndAdd(c, target){
+    return (c.partial ? completeTCGdex(c) : Promise.resolve(c)).then(function(full){
+      var opts = (full.variants && full.variants.length ? full.variants : VARIANTS).slice();
+      if (target === 'want') opts.unshift('Any');
+      var pick = opts.length === 1 ? Promise.resolve(opts[0])
+        : choose('Which version?', full.name + (codeNum(full) ? ', ' + codeNum(full) : ''),
+            opts.map(function(o){ return [o, o === 'Any' ? 'Any version' : o]; }));
+      return pick.then(function(v){
+        if (!v) return;
+        if (target === 'want'){
+          toast(addToWants(full, v) ? 'Added ' + full.name + ' to your want list' : 'That\u2019s already on your want list');
+        } else {
+          var r = addToBinder(full, v);
+          toast('Added ' + full.name + (v !== 'Normal' ? ' (' + v + ')' : '') + (r.qty > 1 ? ', now \u00d7' + r.qty : '') + (r.unwanted ? '. Removed it from your want list.' : ''));
+        }
+        render();
+      });
+    });
+  }
+
+  // ---------- Rendering ----------
+  function pocketHTML(c, o){
+    o = o || {};
+    var t = cardType(c);
+    var img = c.img ? '<img loading="lazy" src="' + esc(c.img) + '" alt="' + esc(c.name) + '" onerror="this.remove()">' : '<span class="ph">' + esc(c.name) + '</span>';
+    var mk = c.mark ? '<span class="mk' + (isLegal(c) ? '' : ' out') + '" title="Regulation mark ' + esc(c.mark) + '">' + esc(c.mark) + '</span>' : '';
+    return '<button class="pocket' + (o.cls ? ' ' + o.cls : '') + '" data-id="' + esc(o.id) + '" style="--t:' + TYPE_COLOR[t] + '">'
+      + '<span class="img">' + img + mk + '</span>'
+      + '<span class="nm">' + esc(c.name) + '</span>'
+      + '<span class="meta">' + esc(codeNum(c) || c.setName || '') + '</span>'
+      + (o.sub ? '<span class="meta">' + esc(o.sub) + '</span>' : '')
+      + (o.badge || '') + '</button>';
+  }
+  function byName(a, b){ return a.name.localeCompare(b.name) || bySetNum(a, b); }
+  function bySetNum(a, b){
+    return (a.setDate || '9999').localeCompare(b.setDate || '9999')
+      || (a.setName || '').localeCompare(b.setName || '')
+      || numVal(a.number) - numVal(b.number)
+      || String(a.number).localeCompare(String(b.number))
+      || String(a.variant).localeCompare(String(b.variant));
+  }
+  function byType(a, b){ return TYPE_ORDER.indexOf(cardType(a)) - TYPE_ORDER.indexOf(cardType(b)) || byName(a, b); }
+  function byMark(a, b){
+    if (!a.mark !== !b.mark) return a.mark ? -1 : 1;
+    return (b.mark || '').localeCompare(a.mark || '') || bySetNum(a, b);
+  }
+
+  function render(){
+    document.querySelectorAll('.tabs button').forEach(function(b){
+      if (b.dataset.view === ui.view) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+    });
+    document.querySelectorAll('.toolbar .seg button').forEach(function(b){ b.setAttribute('aria-pressed', String(b.dataset.sort === ui.sort)); });
+    $('stdBtn').setAttribute('aria-pressed', String(ui.standardOnly));
+    $('toolbar').hidden = ui.view === 'sets';
+
+    var total = store.cards.reduce(function(s, c){ return s + (c.qty || 1); }, 0);
+    var cnt = '';
+    if (ui.view === 'binder' && store.cards.length) cnt = total + (total === 1 ? ' card' : ' cards') + ', ' + store.cards.length + ' different';
+    if (ui.view === 'want' && store.wants.length) cnt = store.wants.length + (store.wants.length === 1 ? ' card' : ' cards') + ' on your want list';
+    $('count').textContent = cnt;
+
+    if (ui.view === 'sets') renderSets();
+    else renderGrid(ui.view === 'want' ? store.wants : store.cards, ui.view === 'want');
+  }
+
+  function renderGrid(all, isWant){
+    var m = $('main');
+    m.className = 'binder';
+    if (!all.length){
+      m.innerHTML = isWant
+        ? '<div class="empty"><strong>Your want list is empty</strong>Tap Add cards and choose Want list, or open a set under Sets to see what you\u2019re missing.</div>'
+        : '<div class="empty"><strong>Your binder is empty</strong>Tap Add cards, search for a card by name, then tap it to put it in your binder.</div>';
+      return;
+    }
+    var f = $('filter').value.trim().toLowerCase();
+    var list = all.filter(function(c){
+      if (ui.standardOnly && !isLegal(c)) return false;
+      if (!f) return true;
+      return [c.name, c.setName, c.setCode, cardType(c), c.number, fmtNum(c), c.rarity, c.mark, c.variant, c.location, c.notes]
+        .join(' ').toLowerCase().indexOf(f) >= 0;
+    });
+    list.sort(ui.sort === 'type' ? byType : ui.sort === 'number' ? bySetNum : ui.sort === 'mark' ? byMark : byName);
+    if (!list.length){
+      m.innerHTML = '<div class="empty"><strong>No matches</strong>' + (f ? 'Nothing matches \u201c' + esc(f) + '\u201d.' : '') + (ui.standardOnly ? ' Standard only is on.' : '') + '</div>';
+      return;
+    }
+    var keyOf = ui.sort === 'type' ? cardType
+      : ui.sort === 'number' ? function(c){ return c.setId || c.setName || '?'; }
+      : ui.sort === 'mark' ? function(c){ return c.mark || ''; } : null;
+    var counts = {}, labels = {}, html = '', group = null;
+    if (keyOf) list.forEach(function(c){
+      var k = keyOf(c); counts[k] = (counts[k] || 0) + (c.qty || 1);
+      if (!labels[k]){
+        if (ui.sort === 'type') labels[k] = '<span class="dot" style="background:' + TYPE_COLOR[k] + '"></span>' + esc(k);
+        else if (ui.sort === 'number') labels[k] = esc([c.setCode, c.setName || 'Unknown set'].filter(Boolean).join(' '));
+        else labels[k] = k ? 'Mark ' + esc(k) + (isLegal({ mark:k }) ? ' <span class="legal">Standard</span>' : '') : 'No mark';
+      }
+    });
+    list.forEach(function(c){
+      if (keyOf){
+        var k = keyOf(c);
+        if (k !== group){ group = k; html += '<h2 class="group">' + labels[k] + ' <span class="n">' + counts[k] + '</span></h2>'; }
+      }
+      var sub = isWant ? (c.variant === 'Any' ? 'Any version' : c.variant)
+        : [c.variant !== 'Normal' ? c.variant : '', c.location].filter(Boolean).join(', ');
+      html += pocketHTML(c, { id:c.key, sub:sub, badge: !isWant && c.qty > 1 ? '<span class="qty">\u00d7' + c.qty + '</span>' : '' });
+    });
+    m.innerHTML = html;
+  }
+
+  function renderSets(){
+    var m = $('main'); m.className = 'sets';
+    setsIndex = {};
+    store.cards.forEach(function(c){
+      if (!c.setId) return;
+      var s = setsIndex[c.setId] || (setsIndex[c.setId] = { id:c.setId, source:c.source, name:c.setName, code:c.setCode,
+        date:c.setDate, total:c.printedTotal, owned:{}, extra:{} });
+      if (!s.total && c.printedTotal) s.total = c.printedTotal;
+      if (!s.code && c.setCode) s.code = c.setCode;
+      if (s.total && numVal(c.number) > s.total) s.extra[c.cardId] = 1; else s.owned[c.cardId] = 1;
+    });
+    var sets = Object.keys(setsIndex).map(function(k){ return setsIndex[k]; })
+      .sort(function(a, b){ return (b.date || '').localeCompare(a.date || '') || a.name.localeCompare(b.name); });
+    if (!sets.length){
+      m.innerHTML = '<div class="empty"><strong>No sets yet</strong>Add some cards and each set shows up here with how close it is to complete. Tap a set to see what you\u2019re missing.</div>';
+      return;
+    }
+    m.innerHTML = sets.map(function(s){
+      var have = Object.keys(s.owned).length, extra = Object.keys(s.extra).length;
+      var pct = s.total ? Math.min(100, Math.round(have / s.total * 100)) : 0;
+      return '<button class="setrow" data-set="' + esc(s.id) + '">'
+        + '<span>' + (s.code ? '<b>' + esc(s.code) + '</b>' : '') + esc(s.name || 'Unknown set') + '</span>'
+        + '<span class="bar"><i style="width:' + pct + '%"></i></span>'
+        + '<span class="scount">' + have + (s.total ? ' of ' + s.total : '') + ' cards' + (extra ? ', plus ' + extra + ' secret' : '') + (s.total ? ' (' + pct + '%)' : '') + '</span>'
+        + '</button>';
+    }).join('');
+  }
+
+  // ---------- Set checklist ----------
+  function loadSetCards(s){
+    if (s.source === 'ptcg'){
+      return fetchPTCGAll('set.id:' + s.id).then(function(list){
+        return list.sort(function(a, b){ return numVal(a.number) - numVal(b.number) || String(a.number).localeCompare(String(b.number)); });
+      });
+    }
+    return tcgdexSet(s.id).then(function(set){
+      if (!set) throw new Error('no set');
+      var cc = set.cardCount || {};
+      return (set.cards || []).map(function(c){
+        return { cardId:'tcgdex:' + c.id, source:'tcgdex', name:c.name, number:c.localId || '', printedTotal:cc.official || null,
+          setId:set.id, setName:set.name, setCode:setAbbr(set), setDate:set.releaseDate || '', types:[], supertype:'',
+          img:c.image ? c.image + '/low.webp' : '', imgLarge:c.image ? c.image + '/high.webp' : '', partial:true };
+      });
+    });
+  }
+  function openSet(id){
+    var s = setsIndex[id]; if (!s) return;
+    curSet = { info:s, cards:null };
+    $('setTitle').textContent = [s.code, s.name].filter(Boolean).join(' ');
+    $('setStatus').textContent = 'Loading the full set\u2026';
+    $('setGrid').innerHTML = '';
+    $('setDlg').showModal();
+    loadSetCards(s).then(function(list){ if (curSet && curSet.info === s){ curSet.cards = list; renderSet(); } })
+      .catch(function(){ $('setStatus').textContent = 'Couldn\u2019t load this set. Check your internet connection and try again.'; });
+  }
+  function renderSet(){
+    if (!curSet || !curSet.cards) return;
+    var owned = {}, wanted = {};
+    store.cards.forEach(function(c){ owned[c.cardId] = (owned[c.cardId] || 0) + c.qty; });
+    store.wants.forEach(function(c){ wanted[c.cardId] = 1; });
+    var all = curSet.cards, total = curSet.info.total || all.length;
+    var main = all.filter(function(c){ return numVal(c.number) <= total; });
+    var have = main.filter(function(c){ return owned[c.cardId]; }).length;
+    var missingOnly = $('missingBtn').getAttribute('aria-pressed') === 'true';
+    $('setStatus').textContent = 'You have ' + have + ' of ' + total + ' cards. ' + (total - have) + ' missing'
+      + (all.length > main.length ? ', not counting ' + (all.length - main.length) + ' secret rares' : '') + '. Tap a card to add it to your binder or want list.';
+    var list = missingOnly ? all.filter(function(c){ return !owned[c.cardId]; }) : all;
+    $('setGrid').innerHTML = list.map(function(c){
+      var badge = owned[c.cardId] ? '<span class="qty">\u00d7' + owned[c.cardId] + '</span>' : wanted[c.cardId] ? '<span class="qty want">Want</span>' : '';
+      return pocketHTML(c, { id:c.cardId, cls: owned[c.cardId] ? '' : 'missing', badge:badge });
+    }).join('') || '<div class="empty"><strong>Set complete</strong>You have every card in this set.</div>';
+  }
+
+  // ---------- Detail ----------
+  function curEntry(){ return open && store[open.list].find(function(x){ return x.key === open.key; }); }
+  function field(label, inner){ return '<label class="field"><span>' + label + '</span>' + inner + '</label>'; }
+  function headHTML(c){
+    var t = cardType(c), legal = isLegal(c);
+    return '<div class="big">' + (c.imgLarge || c.img ? '<img src="' + esc(c.imgLarge || c.img) + '" alt="' + esc(c.name) + '">' : '') + '</div>'
+      + '<h3>' + esc(c.name) + '</h3>'
+      + '<p class="num">' + esc(codeNum(c) || 'No card number') + '</p>'
+      + '<p class="info">' + esc(c.setName || 'Unknown set') + '</p>'
+      + '<p class="info"><span class="dot" style="vertical-align:-1px;margin-right:6px;background:' + TYPE_COLOR[t] + '"></span>' + esc(t) + (c.rarity ? ', ' + esc(c.rarity) : '') + '</p>'
+      + '<p class="info">' + (c.mark ? 'Regulation mark ' + esc(c.mark) : 'No regulation mark') + ' <span class="legal' + (legal ? '' : ' no') + '">' + (legal ? 'Standard legal' : 'Not Standard legal') + '</span></p>';
+  }
+  function variantSelect(cur, withAny){
+    var opts = (withAny ? ['Any'] : []).concat(VARIANTS);
+    return '<select id="fVar">' + opts.map(function(v){ return '<option value="' + v + '"' + (v === cur ? ' selected' : '') + '>' + (v === 'Any' ? 'Any version' : v) + '</option>'; }).join('') + '</select>';
+  }
+  function fixHTML(c){
+    return '<details class="fix"><summary>Fix card info</summary>'
+      + field('Set code', '<input id="fCode" value="' + esc(c.setCode || '') + '" placeholder="e.g. MEE" autocapitalize="characters">')
+      + field('Card number', '<input id="fNum" value="' + esc(c.number || '') + '" placeholder="e.g. 22">')
+      + field('Cards in set', '<input id="fTot" inputmode="numeric" value="' + esc(c.printedTotal || '') + '" placeholder="e.g. 88">')
+      + field('Regulation mark', '<input id="fMark" maxlength="1" value="' + esc(c.mark || '') + '" placeholder="e.g. J" autocapitalize="characters">')
+      + '</details>';
+  }
+  function showEntry(key){
+    var c = store.cards.find(function(x){ return x.key === key; }); if (!c) return;
+    open = { list:'cards', key:key };
+    var locs = uniq(store.cards.map(function(x){ return x.location; }).filter(Boolean)).sort();
+    $('detailTitle').textContent = 'In your binder';
+    $('detail').innerHTML = headHTML(c)
+      + '<div class="stepper"><button data-step="-1" aria-label="One fewer"' + (c.qty <= 1 ? ' disabled' : '') + '>\u2212</button>'
+      + '<output id="qtyOut" aria-label="Copies">' + c.qty + '</output><button data-step="1" aria-label="One more">+</button></div>'
+      + field('Version', variantSelect(c.variant, false))
+      + field('Location', '<input id="fLoc" list="locList" value="' + esc(c.location || '') + '" placeholder="e.g. Blue binder, or Lucario deck"><datalist id="locList">'
+          + locs.map(function(l){ return '<option value="' + esc(l) + '">'; }).join('') + '</datalist>')
+      + field('Notes', '<textarea id="fNotes" rows="3" placeholder="Anything you want to remember">' + esc(c.notes || '') + '</textarea>')
+      + fixHTML(c)
+      + '<div class="actions"><button class="remove" id="removeBtn">Remove from binder</button></div>';
+    if (!$('detailDlg').open) $('detailDlg').showModal();
+  }
+  function showWant(key){
+    var c = store.wants.find(function(x){ return x.key === key; }); if (!c) return;
+    open = { list:'wants', key:key };
+    $('detailTitle').textContent = 'On your want list';
+    $('detail').innerHTML = headHTML(c)
+      + field('Version you want', variantSelect(c.variant, true))
+      + field('Notes', '<textarea id="fNotes" rows="3" placeholder="e.g. Need 2 for my deck">' + esc(c.notes || '') + '</textarea>')
+      + fixHTML(c)
+      + '<div class="actions"><button class="add" id="gotBtn">I got it. Move to binder</button>'
+      + '<button class="remove" id="removeWantBtn">Remove from want list</button></div>';
+    if (!$('detailDlg').open) $('detailDlg').showModal();
+  }
+  function reshow(){ if (!open) return; if (open.list === 'cards') showEntry(open.key); else showWant(open.key); }
+  function setCardField(cardId, k, v){
+    store.cards.concat(store.wants).forEach(function(x){ if (x.cardId === cardId) x[k] = v; });
+  }
+  function changeVariant(v){
+    var c = curEntry(); if (!c) return;
+    var nk = c.cardId + '|' + v; if (nk === c.key) return;
+    var list = store[open.list], ex = list.find(function(x){ return x.key === nk; });
+    if (ex){
+      if (open.list === 'cards'){
+        ex.qty += c.qty;
+        if (!ex.location) ex.location = c.location;
+        if (c.notes) ex.notes = ex.notes ? ex.notes + '\n' + c.notes : c.notes;
+      }
+      store[open.list] = list.filter(function(x){ return x !== c; });
+      toast('Combined with your ' + (v === 'Any' ? 'Any version' : v) + ' entry');
+    } else { c.variant = v; c.key = nk; }
+    open.key = nk; save(); reshow();
+  }
+
+  $('detail').addEventListener('input', function(e){
+    var c = curEntry(); if (!c) return;
+    var id = e.target.id, v = e.target.value;
+    if (id === 'fLoc') c.location = v.trim();
+    else if (id === 'fNotes') c.notes = v;
+    else if (id === 'fCode') setCardField(c.cardId, 'setCode', v.trim().toUpperCase());
+    else if (id === 'fNum') setCardField(c.cardId, 'number', v.trim());
+    else if (id === 'fTot') setCardField(c.cardId, 'printedTotal', parseInt(v, 10) || null);
+    else if (id === 'fMark') setCardField(c.cardId, 'mark', v.trim().toUpperCase().slice(0, 1));
+    else return;
+    save();
+  });
+  $('detail').addEventListener('change', function(e){ if (e.target.id === 'fVar') changeVariant(e.target.value); });
+  $('detail').addEventListener('click', function(e){
+    var c = curEntry(); if (!c) return;
+    var step = e.target.closest('[data-step]');
+    if (step){
+      c.qty = Math.max(1, (c.qty || 1) + Number(step.dataset.step)); save();
+      $('qtyOut').textContent = c.qty;
+      $('detail').querySelector('[data-step="-1"]').disabled = c.qty <= 1;
+      return;
+    }
+    if (e.target.id === 'removeBtn' && confirm('Remove ' + c.name + (c.variant !== 'Normal' ? ' (' + c.variant + ')' : '') + ' from your binder?')){
+      store.cards = store.cards.filter(function(x){ return x !== c; });
+      save(); $('detailDlg').close(); toast('Removed ' + c.name);
+    }
+    if (e.target.id === 'removeWantBtn'){
+      store.wants = store.wants.filter(function(x){ return x !== c; });
+      save(); $('detailDlg').close(); toast('Removed ' + c.name + ' from your want list');
+    }
+    if (e.target.id === 'gotBtn'){
+      var opts = (c.variants && c.variants.length ? c.variants : VARIANTS);
+      var pick = c.variant !== 'Any' ? Promise.resolve(c.variant)
+        : opts.length === 1 ? Promise.resolve(opts[0])
+        : choose('Which version did you get?', c.name, opts.map(function(o){ return [o, o]; }));
+      pick.then(function(v){
+        if (!v) return;
+        addToBinder(c, v);
+        store.wants = store.wants.filter(function(x){ return x.key !== c.key; });
+        if (c.notes){ var b = store.cards.find(function(x){ return x.key === c.cardId + '|' + v; }); if (b && !b.notes) b.notes = c.notes; }
+        save();
+        if ($('detailDlg').open) $('detailDlg').close();
+        toast('Moved ' + c.name + ' to your binder');
+        render();
+      });
+    }
+  });
+  $('detailDlg').addEventListener('close', function(){ open = null; render(); renderSet(); });
+
+  // ---------- Search ----------
+  function parseQuery(q){
+    var name = [], num = '', code = '';
+    q.trim().split(/\s+/).forEach(function(tok){
+      if (!tok) return;
+      var m = tok.replace(/^#/, '').match(/^([a-z]{0,3}\d+[a-z]?)(\/\d+)?$/i);
+      if (m && /\d/.test(m[1]) && !num){ num = m[1]; return; }
+      if (/^[A-Z]{3}$/.test(tok) && !code){ code = tok; return; }
+      name.push(tok);
+    });
+    return { name:name.join(' '), num:num, code:code };
+  }
+  function renderResults(){
+    var owned = {}, wanted = {};
+    store.cards.forEach(function(c){ owned[c.cardId] = (owned[c.cardId] || 0) + c.qty; });
+    store.wants.forEach(function(c){ wanted[c.cardId] = 1; });
+    $('results').innerHTML = lastResults.map(function(c){
+      var badge = owned[c.cardId] ? '<span class="qty">\u00d7' + owned[c.cardId] + '</span>' : wanted[c.cardId] ? '<span class="qty want">Want</span>' : '';
+      return pocketHTML(c, { id:c.cardId, badge:badge });
+    }).join('');
+  }
+  $('searchForm').addEventListener('submit', function(e){
+    e.preventDefault();
+    var raw = $('q').value.trim(), p = parseQuery(raw);
+    if (!p.name && !p.code && !p.num){ $('status').textContent = 'Type a card name, number, or set code to search.'; return; }
+    $('status').textContent = 'Searching\u2026';
+    $('results').innerHTML = '';
+    var codeIgnored = false;
+    searchPTCG(p).then(function(res){
+      if (res.length || !p.code || !p.name) return res;
+      codeIgnored = true;
+      return searchPTCG({ name:p.name, num:p.num, code:'' });
+    }).catch(function(){
+      if (!p.name) throw new Error('need name');
+      return searchTCGdex(p);
+    }).then(function(res){
+      lastResults = res;
+      $('status').textContent = res.length
+        ? res.length + (res.length >= 60 ? '+' : '') + ' found, newest sets first.' + (codeIgnored ? ' Set code ' + p.code + ' wasn\u2019t recognized, so it was left out.' : '') + ' Tap a card to add it.'
+        : 'No cards found for \u201c' + raw + '\u201d. Check the spelling, or try just the name.';
+      renderResults();
+    }).catch(function(){
+      $('status').textContent = p.name
+        ? 'Couldn\u2019t reach the card database. Check your internet connection and search again.'
+        : 'Couldn\u2019t search by set code right now. Try the card name instead.';
+    });
+  });
+  $('results').addEventListener('click', function(e){
+    var b = e.target.closest('.pocket'); if (!b) return;
+    var c = lastResults.find(function(x){ return x.cardId === b.dataset.id; });
+    if (c) pickAndAdd(c, ui.addTo).then(renderResults);
+  });
+  $('setGrid').addEventListener('click', function(e){
+    var b = e.target.closest('.pocket'); if (!b || !curSet || !curSet.cards) return;
+    var c = curSet.cards.find(function(x){ return x.cardId === b.dataset.id; }); if (!c) return;
+    choose(c.name, codeNum(c), [['binder', 'Add to binder'], ['want', 'Add to want list']]).then(function(t){
+      if (t) return pickAndAdd(c, t).then(renderSet);
+    });
+  });
+  $('missingBtn').addEventListener('click', function(){
+    var b = $('missingBtn'); b.setAttribute('aria-pressed', String(b.getAttribute('aria-pressed') !== 'true')); renderSet();
+  });
+
+  // ---------- Settings ----------
+  var sel = $('legalFrom');
+  sel.innerHTML = 'DEFGHIJKLMN'.split('').map(function(m){ return '<option' + (m === store.settings.legalFrom ? ' selected' : '') + '>' + m + '</option>'; }).join('');
+  sel.addEventListener('change', function(){ store.settings.legalFrom = sel.value; save(); render(); });
+
+  $('refreshBtn').addEventListener('click', function(){
+    var all = store.cards.concat(store.wants).filter(function(c){ return !c.setCode || !c.printedTotal || !c.mark || !c.setId; });
+    if (!all.length){ toast('All your cards already have full info'); return; }
+    var ptcgIds = uniq(all.filter(function(c){ return c.source === 'ptcg'; }).map(function(c){ return rawId(c.cardId); }));
+    var dexIds = uniq(all.filter(function(c){ return c.source === 'tcgdex'; }).map(function(c){ return c.cardId; }));
+    var chunks = [];
+    for (var i = 0; i < ptcgIds.length; i += 20) chunks.push(ptcgIds.slice(i, i + 20));
+    toast('Updating\u2026');
+    var updated = 0;
+    function apply(f){
+      store.cards.concat(store.wants).forEach(function(e){
+        if (e.cardId !== f.cardId) return;
+        var changed = false;
+        FILL.forEach(function(k){
+          var empty = e[k] == null || e[k] === '' || (Array.isArray(e[k]) && !e[k].length);
+          if (empty && f[k] != null && f[k] !== '' && !(Array.isArray(f[k]) && !f[k].length)){ e[k] = f[k]; changed = true; }
+        });
+        if (changed) updated++;
+      });
+    }
+    var jobs = chunks.map(function(ch){
+      return fetchPTCGAll('(' + ch.map(function(id){ return 'id:' + id; }).join(' OR ') + ')').then(function(list){ list.forEach(apply); });
+    }).concat(dexIds.map(function(id){ return completeTCGdex({ cardId:id }).then(function(f){ if (f.name) apply(f); }); }));
+    Promise.all(jobs.map(function(j){ return j.catch(function(){ return 'fail'; }); })).then(function(r){
+      save(); render();
+      var failed = r.filter(function(x){ return x === 'fail'; }).length;
+      toast(failed ? 'Updated ' + updated + ' cards. Some couldn\u2019t be reached; try again later.' : 'Updated ' + updated + (updated === 1 ? ' card' : ' cards'));
+    });
+  });
+
+  $('exportBtn').addEventListener('click', function(){
+    var blob = new Blob([JSON.stringify(Object.assign({ version:2 }, store), null, 1)], { type:'application/json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'pokemon-binder-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 2000);
+    toast('Backup downloaded');
+  });
+  $('importFile').addEventListener('change', function(e){
+    var file = e.target.files[0]; if (!file) return;
+    var r = new FileReader();
+    r.onload = function(){
+      try {
+        var data = JSON.parse(r.result);
+        var next = normalize(Array.isArray(data) ? { cards:data } : data);
+        if (!Array.isArray(data) && !Array.isArray(data.cards)) throw new Error('bad');
+        if (!confirm('Replace your binder with this backup? It has ' + next.cards.length + ' binder entries and ' + next.wants.length + ' want list entries.')) return;
+        store = next; save(); sel.value = store.settings.legalFrom;
+        render(); $('settingsDlg').close(); toast('Backup restored');
+      } catch(err){ toast('That file isn\u2019t a binder backup.'); }
+      finally { e.target.value = ''; }
+    };
+    r.readAsText(file);
+  });
+
+  // ---------- Wiring ----------
+  document.querySelectorAll('.tabs button').forEach(function(b){
+    b.addEventListener('click', function(){ ui.view = b.dataset.view; lsSet(VIEWKEY, ui.view); render(); });
+  });
+  document.querySelectorAll('.toolbar .seg button').forEach(function(b){
+    b.addEventListener('click', function(){ ui.sort = b.dataset.sort; lsSet(SORTKEY, ui.sort); render(); });
+  });
+  $('stdBtn').addEventListener('click', function(){ ui.standardOnly = !ui.standardOnly; render(); });
+  $('filter').addEventListener('input', render);
+  function setAddTo(t){
+    ui.addTo = t;
+    document.querySelectorAll('[data-to]').forEach(function(b){ b.setAttribute('aria-pressed', String(b.dataset.to === t)); });
+  }
+  document.querySelectorAll('[data-to]').forEach(function(b){ b.addEventListener('click', function(){ setAddTo(b.dataset.to); }); });
+  $('addBtn').addEventListener('click', function(){
+    setAddTo(ui.view === 'want' ? 'want' : 'binder');
+    $('addDlg').showModal(); setTimeout(function(){ $('q').focus(); }, 50);
+  });
+  $('main').addEventListener('click', function(e){
+    var set = e.target.closest('[data-set]'); if (set){ openSet(set.dataset.set); return; }
+    var b = e.target.closest('.pocket'); if (!b) return;
+    if (ui.view === 'want') showWant(b.dataset.id); else showEntry(b.dataset.id);
+  });
+  $('settingsBtn').addEventListener('click', function(){ $('settingsDlg').showModal(); });
+  document.querySelectorAll('[data-close]').forEach(function(b){
+    b.addEventListener('click', function(){ b.closest('dialog').close(); });
+  });
+  document.querySelectorAll('dialog').forEach(function(d){
+    d.addEventListener('click', function(e){ if (e.target === d) d.close(); });
+  });
+  $('setDlg').addEventListener('close', function(){ curSet = null; $('missingBtn').setAttribute('aria-pressed', 'false'); render(); });
+
+  var tt;
+  function toast(msg){
+    var el = $('toast'); el.textContent = msg; el.classList.add('on');
+    clearTimeout(tt); tt = setTimeout(function(){ el.classList.remove('on'); }, 2600);
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>
