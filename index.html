@@ -218,6 +218,16 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
     <h3>Card info</h3>
     <p>Fills in missing set codes, numbers, and regulation marks for cards already in your binder and want list.</p>
     <div class="row"><button id="refreshBtn">Fill in missing info</button></div>
+    <h3>Sync between devices</h3>
+    <div id="syncOff">
+      <p>Keep your phone and laptop in sync by saving your binder to a private Gist in your GitHub account. Paste the same GitHub access key on each device.</p>
+      <label class="field"><span>GitHub access key</span><input id="tokenIn" type="password" autocomplete="off" spellcheck="false" placeholder="ghp_…"></label>
+      <div class="row"><button id="connectBtn">Connect</button></div>
+    </div>
+    <div id="syncOn" hidden>
+      <p id="syncStatus"></p>
+      <div class="row"><button id="syncBtn">Sync now</button><button id="disconnectBtn">Disconnect this device</button></div>
+    </div>
     <h3>Backup</h3>
     <p>Your binder is saved in this browser on this device. Download a backup now and then, and use it to move everything to another phone or computer.</p>
     <div class="row">
@@ -267,7 +277,8 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
     s = s || {};
     return { cards: (s.cards || []).filter(function(c){ return c && (c.cardId || c.id) && c.name; }).map(migrate),
              wants: (s.wants || []).filter(function(c){ return c && c.cardId && c.name; }).map(migrate),
-             settings: Object.assign({ legalFrom: 'H' }, s.settings || {}) };
+             settings: Object.assign({ legalFrom: 'H' }, s.settings || {}),
+             tomb: Object.assign({}, s.tomb || {}) };
   }
   function load(){
     var s = null;
@@ -279,10 +290,29 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
     }
     return normalize(s);
   }
-  function save(){
+  // Every save stamps changed entries with a time and records deletions,
+  // so two devices can be merged card by card without losing edits.
+  var snap = {};
+  function sigOf(e){ var o = Object.assign({}, e); delete o.updated; return JSON.stringify(o); }
+  function snapshot(){
+    snap = {};
+    ['cards','wants'].forEach(function(n){ store[n].forEach(function(e){ snap[n + '|' + e.key] = sigOf(e); }); });
+  }
+  function stamp(){
+    var now = Date.now(), seen = {};
+    ['cards','wants'].forEach(function(n){
+      store[n].forEach(function(e){
+        var id = n + '|' + e.key; seen[id] = 1;
+        if (snap[id] !== sigOf(e)) e.updated = now;
+      });
+    });
+    Object.keys(snap).forEach(function(id){ if (!seen[id]) store.tomb[id] = now; });
+  }
+  function persist(){
     try { localStorage.setItem(KEY, JSON.stringify(store)); }
     catch(e){ toast('Couldn\u2019t save. Download a backup to be safe.'); }
   }
+  function save(){ stamp(); snapshot(); persist(); scheduleSync(); }
 
   // ---------- Helpers ----------
   function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
@@ -792,7 +822,7 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
   // ---------- Settings ----------
   var sel = $('legalFrom');
   sel.innerHTML = 'DEFGHIJKLMN'.split('').map(function(m){ return '<option' + (m === store.settings.legalFrom ? ' selected' : '') + '>' + m + '</option>'; }).join('');
-  sel.addEventListener('change', function(){ store.settings.legalFrom = sel.value; save(); render(); });
+  sel.addEventListener('change', function(){ store.settings.legalFrom = sel.value; store.settings.updated = Date.now(); save(); render(); });
 
   $('refreshBtn').addEventListener('click', function(){
     var all = store.cards.concat(store.wants).filter(function(c){ return !c.setCode || !c.printedTotal || !c.mark || !c.setId; });
@@ -842,7 +872,7 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
         var next = normalize(Array.isArray(data) ? { cards:data } : data);
         if (!Array.isArray(data) && !Array.isArray(data.cards)) throw new Error('bad');
         if (!confirm('Replace your binder with this backup? It has ' + next.cards.length + ' binder entries and ' + next.wants.length + ' want list entries.')) return;
-        store = next; save(); sel.value = store.settings.legalFrom;
+        next.tomb = Object.assign({}, store.tomb, next.tomb); store = next; save(); sel.value = store.settings.legalFrom;
         render(); $('settingsDlg').close(); toast('Backup restored');
       } catch(err){ toast('That file isn\u2019t a binder backup.'); }
       finally { e.target.value = ''; }
@@ -882,13 +912,126 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
   });
   $('setDlg').addEventListener('close', function(){ curSet = null; $('missingBtn').setAttribute('aria-pressed', 'false'); render(); });
 
+
+  // ---------- Sync (private GitHub Gist) ----------
+  var SYNCKEY = 'pokebinder.sync.v1', FILE = 'pokemon-binder.json';
+  var sync = null;
+  try { sync = JSON.parse(lsGet(SYNCKEY) || 'null'); } catch(e){}
+  var syncing = false, again = false, syncTimer = null;
+  function saveSync(){ if (sync) lsSet(SYNCKEY, JSON.stringify(sync)); else { try { localStorage.removeItem(SYNCKEY); } catch(e){} } }
+  function scheduleSync(){ if (!sync || !sync.token) return; clearTimeout(syncTimer); syncTimer = setTimeout(syncNow, 2500); }
+  function gh(path, opt){
+    opt = opt || {};
+    var headers = { 'Authorization': 'Bearer ' + sync.token, 'Accept': 'application/vnd.github+json' };
+    if (opt.body) headers['Content-Type'] = 'application/json';
+    return fetch('https://api.github.com' + path, { method: opt.method || 'GET', headers: headers,
+      body: opt.body ? JSON.stringify(opt.body) : undefined, cache: 'no-store' }).then(function(r){
+      if (r.status === 401 || r.status === 403) throw new Error('auth');
+      if (r.status === 404) throw new Error('notfound');
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
+  }
+  function payload(s){ return JSON.stringify(Object.assign({ version:2, app:'pokemon-binder' }, s)); }
+  function core(s){ return JSON.stringify({ c:s.cards, w:s.wants, s:s.settings, t:s.tomb }); }
+  function files(s){ var f = {}; f[FILE] = { content: payload(s) }; return f; }
+  function findGist(){
+    if (sync.gistId){
+      return gh('/gists/' + sync.gistId).catch(function(e){
+        if (e.message === 'notfound'){ sync.gistId = null; return findGist(); }
+        throw e;
+      });
+    }
+    return gh('/gists?per_page=100').then(function(list){
+      var g = (list || []).find(function(x){ return x.files && x.files[FILE]; });
+      if (g){ sync.gistId = g.id; saveSync(); return gh('/gists/' + g.id); }
+      return gh('/gists', { method:'POST', body:{ description:'Pok\u00e9mon card binder (synced by the app)', public:false, files:files(store) } })
+        .then(function(ng){ sync.gistId = ng.id; saveSync(); return ng; });
+    });
+  }
+  function readGist(g){
+    var f = g && g.files && g.files[FILE];
+    if (!f) return Promise.resolve(null);
+    if (f.truncated) return fetch(f.raw_url, { cache:'no-store' }).then(function(r){ return r.json(); });
+    try { return Promise.resolve(JSON.parse(f.content)); } catch(e){ return Promise.resolve(null); }
+  }
+  function mergeStores(a, b){
+    var tomb = Object.assign({}, a.tomb);
+    Object.keys(b.tomb).forEach(function(k){ tomb[k] = Math.max(tomb[k] || 0, b.tomb[k]); });
+    var cutoff = Date.now() - 120 * 864e5;
+    Object.keys(tomb).forEach(function(k){ if (tomb[k] < cutoff) delete tomb[k]; });
+    function list(n){
+      var m = {}, order = [];
+      a[n].concat(b[n]).forEach(function(e){
+        var cur = m[e.key];
+        if (!cur) order.push(e.key);
+        if (!cur || (e.updated || 0) > (cur.updated || 0)) m[e.key] = e;
+      });
+      return order.map(function(k){ return m[k]; })
+        .filter(function(e){ var t = tomb[n + '|' + e.key]; return !(t && t >= (e.updated || 0)); });
+    }
+    return { cards:list('cards'), wants:list('wants'), tomb:tomb,
+      settings:(b.settings.updated || 0) > (a.settings.updated || 0) ? b.settings : a.settings };
+  }
+  function setSyncStatus(msg){
+    $('syncOff').hidden = !!sync; $('syncOn').hidden = !sync;
+    if (!sync) return;
+    $('syncStatus').textContent = msg || (sync.last
+      ? 'Sync is on. Last synced ' + new Date(sync.last).toLocaleString([], { dateStyle:'medium', timeStyle:'short' }) + '.'
+      : 'Sync is on.');
+  }
+  function syncNow(manual){
+    if (!sync || !sync.token) return Promise.resolve();
+    if (syncing){ again = true; return Promise.resolve(); }
+    syncing = true; setSyncStatus('Syncing\u2026');
+    var remoteCore = null;
+    return findGist().then(readGist).then(function(remote){
+      var r = remote ? normalize(remote) : null;
+      if (r) remoteCore = core(r);
+      var merged = r ? mergeStores(store, r) : store;
+      if (core(merged) !== core(store)){
+        store = merged; snapshot(); persist();
+        sel.value = store.settings.legalFrom;
+        if (!open || curEntry()) render(); renderSet();
+      }
+      if (core(store) !== remoteCore) return gh('/gists/' + sync.gistId, { method:'PATCH', body:{ files:files(store) } });
+    }).then(function(){
+      sync.last = Date.now(); saveSync(); setSyncStatus();
+      if (manual) toast('Synced');
+    }).catch(function(e){
+      var msg = e.message === 'auth'
+        ? 'Your GitHub access key isn\u2019t working. Disconnect, then connect again with a new key that has Gist permission.'
+        : 'Couldn\u2019t sync just now. It will try again after your next change or when you reopen the app.';
+      setSyncStatus(msg);
+      if (manual) toast('Couldn\u2019t sync');
+    }).then(function(){
+      syncing = false;
+      if (again){ again = false; scheduleSync(); }
+    });
+  }
+  $('connectBtn').addEventListener('click', function(){
+    var t = $('tokenIn').value.trim();
+    if (!t){ toast('Paste your GitHub access key first'); return; }
+    sync = { token:t, gistId:null, last:0 }; saveSync(); $('tokenIn').value = '';
+    syncNow(true);
+  });
+  $('syncBtn').addEventListener('click', function(){ syncNow(true); });
+  $('disconnectBtn').addEventListener('click', function(){
+    if (!confirm('Stop syncing on this device? Your cards stay here, and your synced copy stays in GitHub.')) return;
+    sync = null; saveSync(); setSyncStatus(); toast('Sync turned off on this device');
+  });
+  document.addEventListener('visibilitychange', function(){ if (document.visibilityState === 'visible') syncNow(); });
+
   var tt;
   function toast(msg){
     var el = $('toast'); el.textContent = msg; el.classList.add('on');
     clearTimeout(tt); tt = setTimeout(function(){ el.classList.remove('on'); }, 2600);
   }
 
+  snapshot();
   render();
+  setSyncStatus();
+  syncNow();
 })();
 </script>
 </body>
