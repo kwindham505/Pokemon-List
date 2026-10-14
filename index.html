@@ -114,6 +114,10 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
 .searchrow input{flex:1;min-width:0;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:9px 12px}
 .addto{display:flex;align-items:center;gap:10px;margin:0 0 10px;font-size:.92rem;color:var(--muted)}
 .status{color:var(--muted);font-size:.9rem;margin:0 0 10px}
+.energy{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 12px;font-size:.92rem;color:var(--muted)}
+.energy span:first-child{margin-right:4px}
+.energy .chip{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;color:var(--ink)}
+.energy .dot{width:10px;height:10px}
 .results{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px}
 
 .detail{display:flex;flex-direction:column;align-items:center;text-align:center}
@@ -127,7 +131,7 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
 .stepper{display:flex;align-items:center;gap:14px;margin:12px 0}
 .stepper button{width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:var(--field);font-size:1.3rem}
 .stepper button:disabled{opacity:.4;cursor:default}
-.stepper output{font-size:1.4rem;font-weight:800;min-width:2.5ch}
+.qtyin{width:4.2em;text-align:center;font-size:1.4rem;font-weight:800;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:5px 4px}
 .field{display:block;width:100%;max-width:420px;text-align:left;margin:8px 0}
 .field span{display:block;font-size:.85rem;color:var(--muted);margin-bottom:3px}
 .field input,.field select,.field textarea{width:100%;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:9px 12px}
@@ -203,6 +207,17 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
         <button data-to="binder">Binder</button>
         <button data-to="want">Want list</button>
       </div>
+    </div>
+    <div class="energy" id="energyRow"><span>Energy</span>
+      <button class="chip" data-energy="Grass"><span class="dot" style="background:#4FA83D"></span>Grass</button>
+      <button class="chip" data-energy="Fire"><span class="dot" style="background:#E4572E"></span>Fire</button>
+      <button class="chip" data-energy="Water"><span class="dot" style="background:#2D8FD5"></span>Water</button>
+      <button class="chip" data-energy="Lightning"><span class="dot" style="background:#F2C100"></span>Lightning</button>
+      <button class="chip" data-energy="Psychic"><span class="dot" style="background:#A65CC8"></span>Psychic</button>
+      <button class="chip" data-energy="Fighting"><span class="dot" style="background:#B5652A"></span>Fighting</button>
+      <button class="chip" data-energy="Darkness"><span class="dot" style="background:#3E4A5C"></span>Darkness</button>
+      <button class="chip" data-energy="Metal"><span class="dot" style="background:#8C99A6"></span>Metal</button>
+      <button class="chip" data-energy="Special">Special</button>
     </div>
     <p class="status" id="status">Search by name, like Pikachu. Add a number or set code to narrow it down, like Pikachu 25 or MEE 22. Tap a card to add it.</p>
     <div class="results" id="results"></div>
@@ -395,11 +410,17 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
   }
   function searchPTCG(p){
     var parts = [], nm = p.name.replace(/["\\]/g, '');
-    if (nm) parts.push(/[^a-z0-9]/i.test(nm) ? 'name:"' + nm + '"' : 'name:' + nm + '*');
+    nm.split(/[^a-z0-9\u00c0-\u017f]+/i).filter(Boolean).forEach(function(w){ parts.push('name:*' + w + '*'); });
     if (p.num) parts.push('number:' + (/^\d+$/.test(p.num) ? String(parseInt(p.num, 10)) : p.num));
     if (p.code) parts.push('set.ptcgoCode:' + p.code);
     return getJSON(PTCG + '?q=' + encodeURIComponent(parts.join(' ')) + '&pageSize=60&orderBy=-set.releaseDate&select=' + SEL)
-      .then(function(j){ return (j.data || []).map(fromPTCG); });
+      .then(function(j){ return rankByName((j.data || []).map(fromPTCG), p.name); });
+  }
+  function rankByName(list, name){
+    var n = String(name || '').toLowerCase().replace(/^basic /, '');
+    if (!n) return list;
+    function r(c){ var x = c.name.toLowerCase().replace(/^basic /, ''); return x === n ? 0 : x.indexOf(n) === 0 ? 1 : x.indexOf(n) >= 0 ? 2 : 3; }
+    return list.map(function(c, i){ return [c, i]; }).sort(function(a, b){ return r(a[0]) - r(b[0]) || a[1] - b[1]; }).map(function(a){ return a[0]; });
   }
 
   var setCache = {};
@@ -693,7 +714,7 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
     $('detailTitle').textContent = 'In your binder';
     $('detail').innerHTML = headHTML(c)
       + '<div class="stepper"><button data-step="-1" aria-label="One fewer"' + (c.qty <= 1 ? ' disabled' : '') + '>\u2212</button>'
-      + '<output id="qtyOut" aria-label="Copies">' + c.qty + '</output><button data-step="1" aria-label="One more">+</button></div>'
+      + '<input id="qtyIn" class="qtyin" type="number" min="1" inputmode="numeric" aria-label="How many you have" value="' + c.qty + '"><button data-step="1" aria-label="One more">+</button></div>'
       + evoHTML(c)
       + field('Version', variantSelect(c.variant, false))
       + field('Location', '<input id="fLoc" list="locList" value="' + esc(c.location || '') + '" placeholder="e.g. Blue binder, or Lucario deck"><datalist id="locList">'
@@ -747,6 +768,10 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
     else if (id === 'fNum') setCardField(c.cardId, 'number', v.trim());
     else if (id === 'fTot') setCardField(c.cardId, 'printedTotal', parseInt(v, 10) || null);
     else if (id === 'fMark') setCardField(c.cardId, 'mark', v.trim().toUpperCase().slice(0, 1));
+    else if (id === 'qtyIn'){
+      var n = parseInt(v, 10); if (!(n >= 1)) return;
+      c.qty = n; $('detail').querySelector('[data-step="-1"]').disabled = n <= 1;
+    }
     else return;
     save();
   });
@@ -758,7 +783,7 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
     var step = e.target.closest('[data-step]');
     if (step){
       c.qty = Math.max(1, (c.qty || 1) + Number(step.dataset.step)); save();
-      $('qtyOut').textContent = c.qty;
+      $('qtyIn').value = c.qty;
       $('detail').querySelector('[data-step="-1"]').disabled = c.qty <= 1;
       return;
     }
@@ -898,6 +923,8 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
       if (res.length || !p.code || !p.name) return res;
       codeIgnored = true;
       return searchPTCG({ name:p.name, num:p.num, code:'' });
+    }).then(function(res){
+      return (res.length || !p.name) ? res : searchTCGdex(p).catch(function(){ return res; });
     }).catch(function(){
       if (!p.name) throw new Error('need name');
       return searchTCGdex(p);
@@ -924,6 +951,26 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
     choose(c.name, codeNum(c), [['binder', 'Add to binder'], ['want', 'Add to want list']]).then(function(t){
       if (t) return pickAndAdd(c, t).then(renderSet);
     });
+  });
+
+  $('energyRow').addEventListener('click', function(e){
+    var b = e.target.closest('[data-energy]'); if (!b) return;
+    var t = b.dataset.energy, special = t === 'Special', label = special ? 'Special Energy' : t + ' Energy';
+    var q = special ? 'supertype:Energy -subtypes:Basic' : 'supertype:Energy subtypes:Basic name:*' + t + '*';
+    $('q').value = '';
+    $('status').textContent = 'Finding ' + label + '\u2026';
+    $('results').innerHTML = '';
+    getJSON(PTCG + '?q=' + encodeURIComponent(q) + '&pageSize=120&orderBy=-set.releaseDate&select=' + SEL)
+      .then(function(j){ return (j.data || []).map(fromPTCG); })
+      .then(function(res){ return (res.length || special) ? res : searchTCGdex({ name:label, num:'' }); })
+      .catch(function(){ return special ? [] : searchTCGdex({ name:label, num:'' }); })
+      .then(function(res){
+        lastResults = res;
+        $('status').textContent = res.length
+          ? res.length + ' ' + label + ' cards, newest sets first. Tap one to add it, then open it in your binder to type how many you have.'
+          : 'Couldn\u2019t find ' + label + ' right now. Check your internet connection, or search for it by name.';
+        renderResults();
+      }).catch(function(){ $('status').textContent = 'Couldn\u2019t reach the card database. Check your internet connection and try again.'; });
   });
   $('missingBtn').addEventListener('click', function(){
     var b = $('missingBtn'); b.setAttribute('aria-pressed', String(b.getAttribute('aria-pressed') !== 'true')); renderSet();
