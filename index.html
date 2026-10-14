@@ -17,19 +17,19 @@
 <style>
 :root{
   --bg:#E8EDF3; --sleeve:#F8FAFC; --ink:#18202E; --muted:#5A6577; --line:#C8D1DD;
-  --red:#D52F18; --red-ink:#FFFFFF; --field:#FFFFFF; --ok:#2E7D32;
+  --red:#D52F18; --amber:#9A5A00; --red-ink:#FFFFFF; --field:#FFFFFF; --ok:#2E7D32;
   color-scheme:light; box-sizing:border-box;
   padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
     --bg:#121822; --sleeve:#1C2431; --ink:#E7ECF3; --muted:#98A4B7; --line:#2E3A4B;
-    --red:#FF5B3D; --red-ink:#1A0C08; --field:#151C27; --ok:#5DBB63; color-scheme:dark;
+    --red:#FF5B3D; --amber:#F2B248; --red-ink:#1A0C08; --field:#151C27; --ok:#5DBB63; color-scheme:dark;
   }
 }
 :root[data-theme="dark"]{
   --bg:#121822; --sleeve:#1C2431; --ink:#E7ECF3; --muted:#98A4B7; --line:#2E3A4B;
-  --red:#FF5B3D; --red-ink:#1A0C08; --field:#151C27; --ok:#5DBB63; color-scheme:dark;
+  --red:#FF5B3D; --amber:#F2B248; --red-ink:#1A0C08; --field:#151C27; --ok:#5DBB63; color-scheme:dark;
 }
 *,*::before,*::after{box-sizing:inherit}
 [hidden]{display:none!important}
@@ -81,6 +81,7 @@ h1{margin:0;font-size:clamp(2rem,7vw,2.8rem);font-weight:800;letter-spacing:-.03
 .pocket .nm{display:block;margin-top:6px;font-weight:600;font-size:.82rem;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pocket .meta{display:block;font-size:.72rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pocket .meta.warn{color:var(--red);font-weight:600}
+.pocket .meta.next{color:var(--amber);font-weight:600}
 .evoline{width:100%;max-width:440px;text-align:left;margin:14px 0 4px;padding-top:12px;border-top:1px solid var(--line)}
 .evoline h4{margin:0 0 8px;font-size:1rem}
 .steps{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
@@ -549,6 +550,7 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
       + '<span class="meta">' + esc(codeNum(c) || c.setName || '') + '</span>'
       + (o.sub ? '<span class="meta">' + esc(o.sub) + '</span>' : '')
       + (o.warn ? '<span class="meta warn">' + esc(o.warn) + '</span>' : '')
+      + (o.next ? '<span class="meta next">' + esc(o.next) + '</span>' : '')
       + (o.badge || '') + '</button>';
   }
   function byName(a, b){ return a.name.localeCompare(b.name) || bySetNum(a, b); }
@@ -599,7 +601,7 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
     var owned = ownedByName();
     var list = all.filter(function(c){
       if (ui.standardOnly && !isLegal(c)) return false;
-      if (ui.missingEvo && !isWant && !needsFrom(c, owned)) return false;
+      if (ui.missingEvo && !isWant && !needsFrom(c, owned) && !missingNext(c, owned).length) return false;
       if (!f) return true;
       return [c.name, c.setName, c.setCode, cardType(c), c.number, fmtNum(c), c.rarity, c.mark, c.variant, c.location, c.notes]
         .join(' ').toLowerCase().indexOf(f) >= 0;
@@ -632,7 +634,8 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
         : [c.variant !== 'Normal' ? c.variant : '', c.location].filter(Boolean).join(', ');
       var miss = isWant ? [] : missingChain(c, owned);
       var warn = miss.length ? 'Needs ' + andList(miss) : '';
-      html += pocketHTML(c, { id:c.key, sub:sub, warn:warn, badge: !isWant && c.qty > 1 ? '<span class="qty">\u00d7' + c.qty + '</span>' : '' });
+      var nx = isWant ? [] : missingNext(c, owned);
+      html += pocketHTML(c, { id:c.key, sub:sub, warn:warn, next: nx.length ? 'Next: ' + orList(nx) : '', badge: !isWant && c.qty > 1 ? '<span class="qty">\u00d7' + c.qty + '</span>' : '' });
     });
     m.innerHTML = html;
   }
@@ -905,6 +908,29 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
     return miss;
   }
   function needsFrom(c, owned){ return missingChain(c, owned).length > 0; }
+  // What does this name evolve into? null = not known yet
+  function toOf(name){
+    var e = store.cards.concat(store.wants).find(function(x){ return x.name === name && x.evoKnown; });
+    var a = e ? (e.evolvesTo || []) : null, b = evoCache[name] ? evoCache[name].to : null;
+    if (a === null && b === null) return null;
+    return uniq((a || []).concat(b || []));
+  }
+  // The first later stage you don't own any version of (several options when a Pokémon can evolve different ways)
+  function missingNext(c, owned){
+    var lvl = uniq((c.evolvesTo || []).concat(evoCache[c.name] ? evoCache[c.name].to : []));
+    for (var g = 0; g < 2 && lvl.length; g++){
+      var have = lvl.filter(function(n){ return owned[n]; });
+      if (!have.length) return lvl;
+      var next = [];
+      have.forEach(function(n){ (toOf(n) || []).forEach(function(x){ if (next.indexOf(x) < 0) next.push(x); }); });
+      lvl = next;
+    }
+    return [];
+  }
+  function orList(a){
+    if (a.length > 3) return a.slice(0, 2).join(', ') + ' or ' + (a.length - 2) + ' more';
+    return a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' or ' + a[a.length - 1];
+  }
   // Quietly look up any earlier stages we don't know yet, then redraw
   var prefetching = false;
   function prefetchChains(){
@@ -983,6 +1009,8 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
         : missUp.length ? 'To play this card, you also need ' + andList(missUp) + '. Tap a missing card to find it.'
         : up.length ? 'You have every card this one evolves from.'
         : 'This is a Basic Pok\u00e9mon, so it can be played on its own.';
+      var nx = missingNext(c, owned);
+      if (ok && nx.length) msg += ' You don\u2019t have its next stage yet: ' + orList(nx) + '.';
       $('evoLine').innerHTML = '<h4>Evolution line</h4><div class="steps">' + parts.join('<span class="arrow" aria-hidden="true">\u2192</span>') + '</div><p class="evomsg">' + esc(msg) + '</p>';
     });
   }
