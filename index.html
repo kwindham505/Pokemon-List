@@ -177,7 +177,7 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
 
   <div class="toolbar" id="toolbar">
     <label class="sr" for="filter">Filter cards</label>
-    <input class="filter" id="filter" type="search" placeholder="Filter by name, set, mark, location…" autocomplete="off">
+    <input class="filter" id="filter" type="search" placeholder="Filter by name, set, mark, location…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
     <div class="seg" role="group" aria-label="Sort by">
       <button data-sort="name">Name</button>
       <button data-sort="type">Type</button>
@@ -196,7 +196,7 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
   <div class="dhead">
     <form class="searchrow" id="searchForm">
       <label class="sr" for="q">Card name, number, or set code</label>
-      <input id="q" type="search" placeholder="Pikachu, or MEE 22" autocomplete="off" enterkeyhint="search">
+      <input id="q" type="search" placeholder="Pikachu, or MEE 22" autocomplete="off" enterkeyhint="search" autocorrect="off" autocapitalize="off" spellcheck="false">
       <button class="add" type="submit">Search</button>
     </form>
     <button class="x" data-close aria-label="Close">×</button>
@@ -212,7 +212,7 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
       <button class="chip" data-energy="Grass"><span class="dot" style="background:#4FA83D"></span>Grass</button>
       <button class="chip" data-energy="Fire"><span class="dot" style="background:#E4572E"></span>Fire</button>
       <button class="chip" data-energy="Water"><span class="dot" style="background:#2D8FD5"></span>Water</button>
-      <button class="chip" data-energy="Lightning"><span class="dot" style="background:#F2C100"></span>Lightning</button>
+      <button class="chip" data-energy="Lightning"><span class="dot" style="background:#F2C100"></span>Lightning (Electric)</button>
       <button class="chip" data-energy="Psychic"><span class="dot" style="background:#A65CC8"></span>Psychic</button>
       <button class="chip" data-energy="Fighting"><span class="dot" style="background:#B5652A"></span>Fighting</button>
       <button class="chip" data-energy="Darkness"><span class="dot" style="background:#3E4A5C"></span>Darkness</button>
@@ -374,8 +374,8 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
   }
   function codeNum(c){ return [c.setCode, fmtNum(c)].filter(Boolean).join(' '); }
   function baseFields(c){ var o = {}; BASE.forEach(function(k){ if (c[k] !== undefined) o[k] = c[k]; }); return o; }
-  function getJSON(url){
-    var ctl = new AbortController(); var t = setTimeout(function(){ ctl.abort(); }, 15000);
+  function getJSON(url, ms){
+    var ctl = new AbortController(); var t = setTimeout(function(){ ctl.abort(); }, ms || 20000);
     return fetch(url, { signal: ctl.signal }).then(function(r){
       clearTimeout(t);
       if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -408,12 +408,19 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
     }
     return next(1).then(function(a){ return a.map(fromPTCG); });
   }
-  function searchPTCG(p){
-    var parts = [], nm = p.name.replace(/["\\]/g, '');
-    nm.split(/[^a-z0-9\u00c0-\u017f]+/i).filter(Boolean).forEach(function(w){ parts.push('name:*' + w + '*'); });
+  function nameClause(nm, contains){
+    nm = nm.replace(/["\\]/g, '').trim();
+    if (!nm) return '';
+    if (contains) return nm.split(/[^a-z0-9\u00c0-\u017f]+/i).filter(function(w){ return w.length > 1; }).map(function(w){ return 'name:*' + w + '*'; }).join(' ');
+    if (/^[a-z0-9\u00c0-\u017f]+$/i.test(nm)) return 'name:' + nm + '*';
+    return '(name:"' + nm + '" OR name:"Basic ' + nm + '")';
+  }
+  function searchPTCG(p, contains){
+    var parts = [], nc = nameClause(p.name, contains);
+    if (nc) parts.push(nc);
     if (p.num) parts.push('number:' + (/^\d+$/.test(p.num) ? String(parseInt(p.num, 10)) : p.num));
     if (p.code) parts.push('set.ptcgoCode:' + p.code);
-    return getJSON(PTCG + '?q=' + encodeURIComponent(parts.join(' ')) + '&pageSize=60&orderBy=-set.releaseDate&select=' + SEL)
+    return getJSON(PTCG + '?q=' + encodeURIComponent(parts.join(' ')) + '&pageSize=60&orderBy=-set.releaseDate&select=' + SEL, contains ? 30000 : 20000)
       .then(function(j){ return rankByName((j.data || []).map(fromPTCG), p.name); });
   }
   function rankByName(list, name){
@@ -449,8 +456,16 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
       return tcgdexSet(d.set && d.set.id).then(function(s){ return fromTCGdexDetail(d, s); });
     }).catch(function(){ return c; });
   }
+  function normName(x){ return String(x || '').toLowerCase().replace(/[\u2018\u2019\u02bc`\u00b4]/g, "'"); }
   function searchTCGdex(p){
+    var words = p.name.split(/[^a-z0-9\u00c0-\u017f]+/i).filter(function(w){ return w.length > 1; });
+    var longest = words.slice().sort(function(a, b){ return b.length - a.length; })[0] || p.name;
     return getJSON(TCGDEX + '/cards?name=' + encodeURIComponent(p.name)).then(function(list){
+      if (list && list.length || words.length < 2) return list || [];
+      return getJSON(TCGDEX + '/cards?name=' + encodeURIComponent(longest)).then(function(l2){
+        return (l2 || []).filter(function(c){ var n = normName(c.name); return words.every(function(w){ return n.indexOf(w.toLowerCase()) >= 0; }); });
+      });
+    }).then(function(list){
       list = list || [];
       if (p.num) list = list.filter(function(c){ return numVal(c.localId) === numVal(p.num); });
       return list.slice(0, 60).map(function(c){
@@ -894,14 +909,14 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
   // ---------- Search ----------
   function parseQuery(q){
     var name = [], num = '', code = '';
-    q.trim().split(/\s+/).forEach(function(tok){
+    q.replace(/[\u2018\u2019\u02bc`\u00b4]/g, "'").trim().split(/\s+/).forEach(function(tok){
       if (!tok) return;
       var m = tok.replace(/^#/, '').match(/^([a-z]{0,3}\d+[a-z]?)(\/\d+)?$/i);
       if (m && /\d/.test(m[1]) && !num){ num = m[1]; return; }
       if (/^[A-Z]{3}$/.test(tok) && !code){ code = tok; return; }
       name.push(tok);
     });
-    return { name:name.join(' '), num:num, code:code };
+    return { name:name.join(' ').replace(/\belectric\b/ig, 'Lightning'), num:num, code:code };
   }
   function renderResults(){
     var owned = {}, wanted = {};
@@ -923,6 +938,8 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
       if (res.length || !p.code || !p.name) return res;
       codeIgnored = true;
       return searchPTCG({ name:p.name, num:p.num, code:'' });
+    }).then(function(res){
+      return (res.length || !p.name) ? res : searchPTCG({ name:p.name, num:p.num, code:codeIgnored ? '' : p.code }, true);
     }).then(function(res){
       return (res.length || !p.name) ? res : searchTCGdex(p).catch(function(){ return res; });
     }).catch(function(){
@@ -956,11 +973,11 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
   $('energyRow').addEventListener('click', function(e){
     var b = e.target.closest('[data-energy]'); if (!b) return;
     var t = b.dataset.energy, special = t === 'Special', label = special ? 'Special Energy' : t + ' Energy';
-    var q = special ? 'supertype:Energy -subtypes:Basic' : 'supertype:Energy subtypes:Basic name:*' + t + '*';
+    var q = special ? 'supertype:Energy -subtypes:Basic' : 'supertype:Energy (name:"' + t + ' Energy" OR name:"Basic ' + t + ' Energy")';
     $('q').value = '';
     $('status').textContent = 'Finding ' + label + '\u2026';
     $('results').innerHTML = '';
-    getJSON(PTCG + '?q=' + encodeURIComponent(q) + '&pageSize=120&orderBy=-set.releaseDate&select=' + SEL)
+    getJSON(PTCG + '?q=' + encodeURIComponent(q) + '&pageSize=120&orderBy=-set.releaseDate&select=' + SEL, 30000)
       .then(function(j){ return (j.data || []).map(fromPTCG); })
       .then(function(res){ return (res.length || special) ? res : searchTCGdex({ name:label, num:'' }); })
       .catch(function(){ return special ? [] : searchTCGdex({ name:label, num:'' }); })
