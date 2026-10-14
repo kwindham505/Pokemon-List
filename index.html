@@ -71,7 +71,12 @@ h1{margin:0;font-size:clamp(2rem,7vw,2.8rem);font-weight:800;letter-spacing:-.03
 .pocket{position:relative;display:block;width:100%;text-align:left;background:var(--sleeve);
   border:1px solid var(--line);border-radius:9px;padding:6px 6px 9px;box-shadow:inset 0 -3px 0 var(--t,transparent)}
 .pocket .img{position:relative;width:100%;aspect-ratio:63/88;border-radius:5px;background:var(--line);overflow:hidden;display:flex;align-items:center;justify-content:center}
-.pocket .ph{color:var(--muted);font-size:.7rem;text-align:center;padding:4px}
+.ph{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;width:100%;height:100%;color:var(--muted);font-size:.72rem;text-align:center;padding:6px}
+.ph b{color:var(--ink);font-size:.8rem}
+.detail .big .ph{font-size:1rem}
+.detail .big .ph b{font-size:1.2rem}
+.photobtns{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin:10px 0 0}
+.photobtns button,.photobtns label{border:1px solid var(--line);background:var(--field);border-radius:10px;padding:8px 12px;font-size:.88rem;cursor:pointer}
 .pocket img{width:100%;height:100%;object-fit:cover;display:block}
 .pocket .nm{display:block;margin-top:6px;font-weight:600;font-size:.82rem;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pocket .meta{display:block;font-size:.72rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -533,7 +538,8 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
   function pocketHTML(c, o){
     o = o || {};
     var t = cardType(c);
-    var img = c.img ? '<img loading="lazy" src="' + esc(c.img) + '" alt="' + esc(c.name) + '" onerror="this.remove()">' : '<span class="ph">' + esc(c.name) + '</span>';
+    var src = c.photo || c.img;
+    var img = src ? '<img loading="lazy" src="' + esc(src) + '" alt="' + esc(c.name) + '" onerror="cardImgFail(this)">' : noPic(c.name);
     var mk = c.mark ? '<span class="mk' + (isLegal(c) ? '' : ' out') + '" title="Regulation mark ' + esc(c.mark) + '">' + esc(c.mark) + '</span>' : '';
     return '<button class="pocket' + (o.cls ? ' ' + o.cls : '') + '" data-id="' + esc(o.id) + '" style="--t:' + TYPE_COLOR[t] + '">'
       + '<span class="img">' + img + mk + '</span>'
@@ -703,7 +709,8 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
   function field(label, inner){ return '<label class="field"><span>' + label + '</span>' + inner + '</label>'; }
   function headHTML(c){
     var t = cardType(c), legal = isLegal(c);
-    return '<div class="big">' + (c.imgLarge || c.img ? '<img src="' + esc(c.imgLarge || c.img) + '" alt="' + esc(c.name) + '">' : '') + '</div>'
+    var big = c.photo || c.imgLarge || c.img;
+    return '<div class="big">' + (big ? '<img src="' + esc(big) + '" alt="' + esc(c.name) + '" onerror="cardImgFail(this)">' : noPic(c.name)) + '</div>'
       + '<h3>' + esc(c.name) + '</h3>'
       + '<p class="num">' + esc(codeNum(c) || 'No card number') + '</p>'
       + '<p class="info">' + esc(c.setName || 'Unknown set') + '</p>'
@@ -713,6 +720,35 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
   function variantSelect(cur, withAny){
     var opts = (withAny ? ['Any'] : []).concat(VARIANTS);
     return '<select id="fVar">' + opts.map(function(v){ return '<option value="' + v + '"' + (v === cur ? ' selected' : '') + '>' + (v === 'Any' ? 'Any version' : v) + '</option>'; }).join('') + '</select>';
+  }
+
+  function noPic(name){ return '<span class="ph"><b>' + esc(name) + '</b>No picture yet</span>'; }
+  // If a picture won't load, try the other file formats the databases use, then show a placeholder
+  window.cardImgFail = function(el){
+    var s = el.getAttribute('src') || '', next = '';
+    if (/\/(low|high)\.webp$/.test(s)) next = s.replace(/\.webp$/, '.png');
+    else if (/\/high\.png$/.test(s)) next = s.replace(/high\.png$/, 'low.png');
+    if (next){ el.setAttribute('src', next); return; }
+    var box = el.parentNode; el.remove();
+    if (box && !box.querySelector('.ph')) box.insertAdjacentHTML('afterbegin', noPic(el.getAttribute('alt') || ''));
+  };
+  function shrinkPhoto(file){
+    return new Promise(function(resolve, reject){
+      var url = URL.createObjectURL(file), im = new Image();
+      im.onload = function(){
+        var W = 360, H = 503, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+        var r = Math.max(W / im.width, H / im.height), w = im.width * r, h = im.height * r;
+        cv.getContext('2d').drawImage(im, (W - w) / 2, (H - h) / 2, w, h);
+        URL.revokeObjectURL(url); resolve(cv.toDataURL('image/jpeg', 0.72));
+      };
+      im.onerror = function(){ URL.revokeObjectURL(url); reject(new Error('bad image')); };
+      im.src = url;
+    });
+  }
+  function photoHTML(c){
+    return '<div class="photobtns"><label>' + (c.photo ? 'Replace my photo' : 'Use my own photo')
+      + '<input id="photoIn" type="file" accept="image/*" class="sr"></label>'
+      + (c.photo ? '<button id="photoDel">Remove my photo</button>' : '') + '</div>';
   }
   function fixHTML(c){
     return '<details class="fix"><summary>Fix card info</summary>'
@@ -735,6 +771,7 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
       + field('Location', '<input id="fLoc" list="locList" value="' + esc(c.location || '') + '" placeholder="e.g. Blue binder, or Lucario deck"><datalist id="locList">'
           + locs.map(function(l){ return '<option value="' + esc(l) + '">'; }).join('') + '</datalist>')
       + field('Notes', '<textarea id="fNotes" rows="3" placeholder="Anything you want to remember">' + esc(c.notes || '') + '</textarea>')
+      + photoHTML(c)
       + fixHTML(c)
       + '<div class="actions"><button class="remove" id="removeBtn">Remove from binder</button></div>';
     if (!$('detailDlg').open) $('detailDlg').showModal();
@@ -748,6 +785,7 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
       + evoHTML(c)
       + field('Version you want', variantSelect(c.variant, true))
       + field('Notes', '<textarea id="fNotes" rows="3" placeholder="e.g. Need 2 for my deck">' + esc(c.notes || '') + '</textarea>')
+      + photoHTML(c)
       + fixHTML(c)
       + '<div class="actions"><button class="add" id="gotBtn">I got it. Move to binder</button>'
       + '<button class="remove" id="removeWantBtn">Remove from want list</button></div>';
@@ -790,11 +828,20 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
     else return;
     save();
   });
-  $('detail').addEventListener('change', function(e){ if (e.target.id === 'fVar') changeVariant(e.target.value); });
+  $('detail').addEventListener('change', function(e){
+    if (e.target.id === 'fVar') changeVariant(e.target.value);
+    if (e.target.id === 'photoIn' && e.target.files[0]){
+      var c = curEntry(); if (!c) return;
+      shrinkPhoto(e.target.files[0]).then(function(data){
+        setCardField(c.cardId, 'photo', data); save(); reshow(); toast('Photo added');
+      }).catch(function(){ toast('That photo couldn\u2019t be used. Try another one.'); });
+    }
+  });
   $('detail').addEventListener('click', function(e){
     var ev = e.target.closest('[data-evo]');
     if (ev){ openSearch(ev.dataset.evo); return; }
     var c = curEntry(); if (!c) return;
+    if (e.target.id === 'photoDel'){ setCardField(c.cardId, 'photo', ''); save(); reshow(); toast('Photo removed'); return; }
     var step = e.target.closest('[data-step]');
     if (step){
       c.qty = Math.max(1, (c.qty || 1) + Number(step.dataset.step)); save();
