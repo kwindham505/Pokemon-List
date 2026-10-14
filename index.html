@@ -188,6 +188,7 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
       <button data-sort="type">Type</button>
       <button data-sort="number">Number</button>
       <button data-sort="mark">Mark</button>
+      <button data-sort="dupes">Dupes</button>
     </div>
     <button class="chip" id="stdBtn" aria-pressed="false">Standard only</button>
     <button class="chip" id="evoBtn" aria-pressed="false">Missing evolutions</button>
@@ -527,6 +528,7 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
           toast(addToWants(full, v) ? 'Added ' + full.name + ' to your want list' : 'That\u2019s already on your want list');
         } else {
           var r = addToBinder(full, v);
+          setTimeout(prefetchChains, 300);
           toast('Added ' + full.name + (v !== 'Normal' ? ' (' + v + ')' : '') + (r.qty > 1 ? ', now \u00d7' + r.qty : '') + (r.unwanted ? '. Removed it from your want list.' : ''));
         }
         render();
@@ -557,6 +559,7 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
       || String(a.number).localeCompare(String(b.number))
       || String(a.variant).localeCompare(String(b.variant));
   }
+  function byDupes(a, b){ return (b.qty || 1) - (a.qty || 1) || byName(a, b); }
   function byType(a, b){ return TYPE_ORDER.indexOf(cardType(a)) - TYPE_ORDER.indexOf(cardType(b)) || byName(a, b); }
   function byMark(a, b){
     if (!a.mark !== !b.mark) return a.mark ? -1 : 1;
@@ -601,20 +604,22 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
       return [c.name, c.setName, c.setCode, cardType(c), c.number, fmtNum(c), c.rarity, c.mark, c.variant, c.location, c.notes]
         .join(' ').toLowerCase().indexOf(f) >= 0;
     });
-    list.sort(ui.sort === 'type' ? byType : ui.sort === 'number' ? bySetNum : ui.sort === 'mark' ? byMark : byName);
+    list.sort(ui.sort === 'type' ? byType : ui.sort === 'number' ? bySetNum : ui.sort === 'mark' ? byMark : ui.sort === 'dupes' ? byDupes : byName);
     if (!list.length){
       m.innerHTML = '<div class="empty"><strong>No matches</strong>' + (f ? 'Nothing matches \u201c' + esc(f) + '\u201d.' : '') + (ui.standardOnly ? ' Standard only is on.' : '') + (ui.missingEvo && !isWant ? ' Missing evolutions is on, and every card you have can be played.' : '') + '</div>';
       return;
     }
     var keyOf = ui.sort === 'type' ? cardType
       : ui.sort === 'number' ? function(c){ return c.setId || c.setName || '?'; }
-      : ui.sort === 'mark' ? function(c){ return c.mark || ''; } : null;
+      : ui.sort === 'mark' ? function(c){ return c.mark || ''; }
+      : ui.sort === 'dupes' ? function(c){ return String(c.qty || 1); } : null;
     var counts = {}, labels = {}, html = '', group = null;
     if (keyOf) list.forEach(function(c){
-      var k = keyOf(c); counts[k] = (counts[k] || 0) + (c.qty || 1);
+      var k = keyOf(c); counts[k] = (counts[k] || 0) + (ui.sort === 'dupes' ? 1 : (c.qty || 1));
       if (!labels[k]){
         if (ui.sort === 'type') labels[k] = '<span class="dot" style="background:' + TYPE_COLOR[k] + '"></span>' + esc(k);
         else if (ui.sort === 'number') labels[k] = esc([c.setCode, c.setName || 'Unknown set'].filter(Boolean).join(' '));
+        else if (ui.sort === 'dupes') labels[k] = k === '1' ? 'Singles' : k + ' copies (' + (Number(k) - 1) + ' extra)';
         else labels[k] = k ? 'Mark ' + esc(k) + (isLegal({ mark:k }) ? ' <span class="legal">Standard</span>' : '') : 'No mark';
       }
     });
@@ -625,7 +630,8 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
       }
       var sub = isWant ? (c.variant === 'Any' ? 'Any version' : c.variant)
         : [c.variant !== 'Normal' ? c.variant : '', c.location].filter(Boolean).join(', ');
-      var warn = !isWant && needsFrom(c, owned) ? 'Needs ' + c.evolvesFrom : '';
+      var miss = isWant ? [] : missingChain(c, owned);
+      var warn = miss.length ? 'Needs ' + andList(miss) : '';
       html += pocketHTML(c, { id:c.key, sub:sub, warn:warn, badge: !isWant && c.qty > 1 ? '<span class="qty">\u00d7' + c.qty + '</span>' : '' });
     });
     m.innerHTML = html;
@@ -883,7 +889,42 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
   function isPokemon(c){ return /pok/i.test(c.supertype || ''); }
   function ownedByName(){ var m = {}; store.cards.forEach(function(x){ m[x.name] = (m[x.name] || 0) + (x.qty || 1); }); return m; }
   function wantedByName(){ var m = {}; store.wants.forEach(function(x){ m[x.name] = 1; }); return m; }
-  function needsFrom(c, owned){ return !!c.evolvesFrom && !owned[c.evolvesFrom]; }
+  // What does this name evolve from? '' = nothing (Basic), null = not known yet
+  function fromOf(name){
+    var e = store.cards.concat(store.wants).find(function(x){ return x.name === name && x.evoKnown; });
+    if (e) return e.evolvesFrom || '';
+    return evoCache[name] ? (evoCache[name].from || '') : null;
+  }
+  function missingChain(c, owned){
+    var miss = [], name = c.evolvesFrom, g = 0;
+    while (name && g++ < 3){
+      if (!owned[name]) miss.unshift(name);
+      var f = fromOf(name); if (f === null) break;
+      name = f;
+    }
+    return miss;
+  }
+  function needsFrom(c, owned){ return missingChain(c, owned).length > 0; }
+  // Quietly look up any earlier stages we don't know yet, then redraw
+  var prefetching = false;
+  function prefetchChains(){
+    if (prefetching) return;
+    var want = [];
+    store.cards.forEach(function(c){
+      var name = c.evolvesFrom, g = 0;
+      while (name && g++ < 3){
+        var f = fromOf(name);
+        if (f === null){ if (want.indexOf(name) < 0) want.push(name); break; }
+        name = f;
+      }
+    });
+    if (!want.length) return;
+    prefetching = true;
+    Promise.all(want.slice(0, 40).map(evoInfo)).then(function(infos){
+      prefetching = false;
+      if (infos.some(Boolean)){ render(); if (want.length > 40 || infos.some(function(i){ return i && i.from; })) setTimeout(prefetchChains, 500); }
+    });
+  }
   function andList(a){ return a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1]; }
   function evoInfo(name){
     if (evoCache[name]) return Promise.resolve(evoCache[name]);
@@ -892,7 +933,7 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
     var q = 'name:"' + name.replace(/["\\]/g, '') + '"';
     return getJSON(PTCG + '?q=' + encodeURIComponent(q) + '&pageSize=20&select=name,evolvesFrom,evolvesTo').then(function(j){
       var hits = (j.data || []).filter(function(x){ return x.name === name; });
-      if (!hits.length) return { from:'', to:[] };
+      if (!hits.length){ evoCache[name] = { from:'', to:[] }; lsSet(EVOKEY, JSON.stringify(evoCache)); return evoCache[name]; }
       var info = { from:'', to:[] };
       hits.forEach(function(h){
         if (!info.from && h.evolvesFrom) info.from = h.evolvesFrom;
@@ -1259,6 +1300,7 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
   setSyncStatus();
   syncNow();
   setTimeout(function(){ fillMissing(true); }, 4000);
+  setTimeout(prefetchChains, 7000);
 })();
 </script>
 </body>
