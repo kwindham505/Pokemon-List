@@ -125,6 +125,11 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
 .energy .chip{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;color:var(--ink)}
 .energy .dot{width:10px;height:10px}
 .results{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px}
+.manualrow{margin:14px 0 0;color:var(--muted);font-size:.9rem}
+.manualrow button{border:1px solid var(--line);background:var(--field);border-radius:10px;padding:9px 13px;margin-left:4px}
+.manual .pair{display:flex;gap:8px;max-width:420px}
+.manual .pair .field{flex:1}
+.manual .go{display:block;width:100%;max-width:420px;margin:14px 0 4px}
 
 .detail{display:flex;flex-direction:column;align-items:center;text-align:center}
 .detail .big{width:min(280px,72vw);aspect-ratio:63/88;border-radius:12px;overflow:hidden;background:var(--line)}
@@ -228,7 +233,34 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
     </div>
     <p class="status" id="status">Search by name, like Pikachu. Add a number or set code to narrow it down, like Pikachu 25 or MEE 22. Tap a card to add it.</p>
     <div class="results" id="results"></div>
+    <p class="manualrow" id="manualRow" hidden>Can’t find your card? <button type="button" id="manualBtn">Add it yourself</button></p>
   </div>
+</dialog>
+
+<dialog id="manualDlg" aria-label="Add a card yourself">
+  <div class="dhead"><h2>Add a card yourself</h2><button class="x" data-close aria-label="Close">×</button></div>
+  <form class="dbody manual" id="manualForm">
+    <p class="sub">For promos and new cards the databases don’t have yet. Only the name is required. You can add your own photo of it afterwards from your binder.</p>
+    <label class="field"><span>Card name</span><input id="mName" required autocomplete="off" placeholder="Nidorina"></label>
+    <div class="pair">
+      <label class="field"><span>Card number</span><input id="mNum" autocomplete="off" placeholder="101"></label>
+      <label class="field"><span>Out of (leave blank for promos)</span><input id="mTotal" inputmode="numeric" autocomplete="off" placeholder="182"></label>
+    </div>
+    <div class="pair">
+      <label class="field"><span>Set code</span><input id="mCode" autocomplete="off" autocapitalize="characters" placeholder="MEP"></label>
+      <label class="field"><span>Regulation mark</span><select id="mMark"></select></label>
+    </div>
+    <label class="field"><span>Set name</span><input id="mSet" autocomplete="off" placeholder="Mega Evolution Black Star Promos"></label>
+    <div class="pair">
+      <label class="field"><span>Type</span><select id="mType"></select></label>
+      <label class="field"><span>Version</span><select id="mVar"></select></label>
+    </div>
+    <div class="pair">
+      <label class="field"><span>Rarity</span><input id="mRarity" autocomplete="off" placeholder="Promo"></label>
+      <label class="field"><span>Evolves from</span><input id="mFrom" autocomplete="off" placeholder="Nidoran♀"></label>
+    </div>
+    <button class="add go" type="submit" id="mGo">Add to binder</button>
+  </form>
 </dialog>
 
 <dialog id="detailDlg" aria-label="Card details">
@@ -1025,14 +1057,15 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
   // ---------- Search ----------
   function parseQuery(q){
     var name = [], num = '', code = '';
-    q.replace(/[\u2018\u2019\u02bc`\u00b4]/g, "'").trim().split(/\s+/).forEach(function(tok){
+    var promo = /\bpromos?\b|\bblack\s*star\b/i.test(q);
+    q.replace(/[\u2018\u2019\u02bc`\u00b4]/g, "'").replace(/\bpromos?\b|\bblack\s*star\b|\bcards?\b/ig, ' ').trim().split(/\s+/).forEach(function(tok){
       if (!tok) return;
       var m = tok.replace(/^#/, '').match(/^([a-z]{0,3}\d+[a-z]?)(\/\d+)?$/i);
       if (m && /\d/.test(m[1]) && !num){ num = m[1]; return; }
       if (/^[A-Z]{3}$/.test(tok) && !code){ code = tok; return; }
       name.push(tok);
     });
-    return { name:name.join(' ').replace(/\belectric\b/ig, 'Lightning'), num:num, code:code };
+    return { name:name.join(' ').replace(/\belectric\b/ig, 'Lightning'), num:num, code:code, promo:promo };
   }
   function renderResults(){
     var owned = {}, wanted = {};
@@ -1050,28 +1083,85 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
     $('status').textContent = 'Searching\u2026';
     $('results').innerHTML = '';
     var codeIgnored = false;
-    searchPTCG(p).then(function(res){
+    $('manualRow').hidden = true;
+    var dex = p.name ? searchTCGdex(p).catch(function(){ return null; }) : Promise.resolve([]);
+    var ptcg = searchPTCG(p).then(function(res){
       if (res.length || !p.code || !p.name) return res;
       codeIgnored = true;
       return searchPTCG({ name:p.name, num:p.num, code:'' });
     }).then(function(res){
       return (res.length || !p.name) ? res : searchPTCG({ name:p.name, num:p.num, code:codeIgnored ? '' : p.code }, true);
-    }).then(function(res){
-      return (res.length || !p.name) ? res : searchTCGdex(p).catch(function(){ return res; });
-    }).catch(function(){
-      if (!p.name) throw new Error('need name');
-      return searchTCGdex(p);
-    }).then(function(res){
+    }).catch(function(){ return null; });
+    Promise.all([ptcg, dex]).then(function(r){
+      if (r[0] === null && r[1] === null) throw new Error('offline');
+      var res = mergeResults(r[0] || [], r[1] || []);
+      if (p.promo) res = res.filter(function(c){ return isPromo(c); }).concat(res.filter(function(c){ return !isPromo(c); }));
       lastResults = res;
       $('status').textContent = res.length
-        ? res.length + (res.length >= 60 ? '+' : '') + ' found, newest sets first.' + (codeIgnored ? ' Set code ' + p.code + ' wasn\u2019t recognized, so it was left out.' : '') + ' Tap a card to add it.'
-        : 'No cards found for \u201c' + raw + '\u201d. Check the spelling, or try just the name.';
+        ? res.length + (res.length >= 60 ? '+' : '') + ' found, newest first.' + (codeIgnored ? ' Set code ' + p.code + ' wasn\u2019t recognized, so it was left out.' : '') + ' Tap a card to add it.'
+        : 'No cards found for \u201c' + raw + '\u201d. Brand-new promos can take a while to reach the card databases. You can add it yourself below.';
       renderResults();
+      $('manualRow').hidden = false;
     }).catch(function(){
       $('status').textContent = p.name
-        ? 'Couldn\u2019t reach the card database. Check your internet connection and search again.'
+        ? 'Couldn\u2019t reach the card databases. Check your internet connection and search again, or add the card yourself below.'
         : 'Couldn\u2019t search by set code right now. Try the card name instead.';
+      $('manualRow').hidden = !p.name;
     });
+  });
+  // Cards from the second database that the first one doesn't have yet (usually the newest
+  // sets and promos) go first. Pocket (phone game) cards are left out.
+  function setKey(id){
+    return String(id).toLowerCase().replace(/\./g, 'pt').replace(/(^|[a-z])0+(?=\d)/g, '$1');
+  }
+  function cardKey(c){
+    var id = rawId(c.cardId), i = id.lastIndexOf('-');
+    return setKey(i > 0 ? id.slice(0, i) : (c.setId || '')) + '|' + numVal(i > 0 ? id.slice(i + 1) : c.number);
+  }
+  function isPocket(c){ return c.source === 'tcgdex' && /^[A-Z]/.test(rawId(c.cardId)); }
+  function isPromo(c){ return /promo/i.test((c.setName || '') + ' ' + (c.rarity || '')) || /^[a-z]+p-/i.test(rawId(c.cardId)) || /^[a-z]+p$/i.test(c.setId || ''); }
+  function mergeResults(ptcg, dex){
+    var seen = {};
+    ptcg.forEach(function(c){ seen[cardKey(c)] = 1; });
+    var extra = dex.filter(function(c){ return !isPocket(c) && !seen[cardKey(c)]; });
+    return extra.concat(ptcg).slice(0, 80);
+  }
+
+  // ---------- Add a card yourself ----------
+  $('mMark').innerHTML = '<option value="">None or not sure</option>' + 'DEFGHIJKLMN'.split('').map(function(m){ return '<option>' + m + '</option>'; }).join('');
+  $('mType').innerHTML = TYPE_ORDER.filter(function(t){ return t !== 'Other'; }).map(function(t){ return '<option>' + t + '</option>'; }).join('');
+  $('mVar').innerHTML = VARIANTS.map(function(v){ return '<option>' + v + '</option>'; }).join('');
+  $('manualBtn').addEventListener('click', function(){
+    var p = parseQuery($('q').value);
+    $('manualForm').reset();
+    $('mName').value = p.name;
+    $('mNum').value = p.num;
+    $('mCode').value = p.code;
+    if (p.promo) $('mRarity').value = 'Promo';
+    $('mGo').textContent = ui.addTo === 'want' ? 'Add to want list' : 'Add to binder';
+    $('manualDlg').showModal();
+    setTimeout(function(){ $(p.name ? 'mSet' : 'mName').focus(); }, 50);
+  });
+  $('manualForm').addEventListener('submit', function(e){
+    e.preventDefault();
+    var name = $('mName').value.trim(); if (!name) return;
+    var t = $('mType').value, kind = t === 'Trainer' ? 'Trainer' : t === 'Energy' ? 'Energy' : 'Pok\u00e9mon';
+    var num = $('mNum').value.trim().replace(/^#/, ''), tot = $('mTotal').value.trim();
+    if (!tot && /\//.test(num)){ tot = num.split('/')[1]; num = num.split('/')[0]; }
+    var v = $('mVar').value;
+    var card = { cardId:'manual:' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), source:'manual', name:name,
+      supertype:kind, subtypes:[], types: kind === 'Pok\u00e9mon' ? [t] : [], number:num, printedTotal: parseInt(tot, 10) || null,
+      setId:'', setName:$('mSet').value.trim(), setCode:$('mCode').value.trim().toUpperCase(), setDate:'',
+      rarity:$('mRarity').value.trim(), mark:$('mMark').value, img:'', imgLarge:'', variants:[v],
+      evolvesFrom:$('mFrom').value.trim(), evolvesTo:[], evoKnown:true };
+    if (ui.addTo === 'want'){
+      addToWants(card, v); toast('Added ' + name + ' to your want list');
+    } else {
+      addToBinder(card, v); setTimeout(prefetchChains, 300);
+      toast('Added ' + name + (v !== 'Normal' ? ' (' + v + ')' : '') + '. Open it in your binder to add a photo.');
+    }
+    $('manualDlg').close(); render(); renderResults();
+    $('q').value = ''; $('q').focus();
   });
   $('results').addEventListener('click', function(e){
     var b = e.target.closest('.pocket'); if (!b) return;
@@ -1189,7 +1279,7 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
   document.querySelectorAll('[data-to]').forEach(function(b){ b.addEventListener('click', function(){ setAddTo(b.dataset.to); }); });
   $('addBtn').addEventListener('click', function(){
     setAddTo(ui.view === 'want' ? 'want' : 'binder');
-    $('q').value = ''; lastResults = []; $('results').innerHTML = '';
+    $('q').value = ''; lastResults = []; $('results').innerHTML = ''; $('manualRow').hidden = true;
     $('status').textContent = 'Search by name, like Pikachu. Add a number or set code to narrow it down, like Pikachu 25 or MEE 22. Tap a card to add it.';
     $('addDlg').showModal(); setTimeout(function(){ $('q').focus(); }, 50);
   });
