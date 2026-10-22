@@ -240,7 +240,7 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
 <dialog id="manualDlg" aria-label="Add a card yourself">
   <div class="dhead"><h2>Add a card yourself</h2><button class="x" data-close aria-label="Close">×</button></div>
   <form class="dbody manual" id="manualForm">
-    <p class="sub">For promos and new cards the databases don’t have yet. Only the name is required. You can add your own photo of it afterwards from your binder.</p>
+    <p class="sub">For promos and new cards the databases don’t have yet. Only the name is required, but with the card number filled in, the app will swap in the official picture and details once the database has the card. You can add your own photo afterwards from your binder.</p>
     <label class="field"><span>Card name</span><input id="mName" required autocomplete="off" placeholder="Nidorina"></label>
     <div class="pair">
       <label class="field"><span>Card number</span><input id="mNum" autocomplete="off" placeholder="101"></label>
@@ -289,7 +289,7 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
     <p>Cards with this regulation mark or later are marked Standard legal. Change it when the format rotates. Basic Energy is always legal.</p>
     <label>Oldest legal mark <select id="legalFrom"></select></label>
     <h3>Card info</h3>
-    <p>Fills in missing set codes, numbers, and regulation marks for cards already in your binder and want list.</p>
+    <p>Fills in missing set codes, numbers, and regulation marks for cards already in your binder and want list. Also matches cards you added yourself once the card database has them. That also happens on its own when you open the app.</p>
     <div class="row"><button id="refreshBtn">Fill in missing info</button></div>
     <h3>Sync between devices</h3>
     <div id="syncOff">
@@ -1204,9 +1204,67 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
   sel.innerHTML = 'DEFGHIJKLMN'.split('').map(function(m){ return '<option' + (m === store.settings.legalFrom ? ' selected' : '') + '>' + m + '</option>'; }).join('');
   sel.addEventListener('change', function(){ store.settings.legalFrom = sel.value; store.settings.updated = Date.now(); save(); render(); });
 
-  function fillMissing(quiet){
-    var all = store.cards.concat(store.wants).filter(function(c){ return quiet ? !c.evoKnown : (!c.setCode || !c.printedTotal || !c.mark || !c.setId || !c.evoKnown); });
-    if (!all.length){ if (!quiet) toast('All your cards already have full info'); return; }
+  // Cards added by hand: look for them in the databases by name and number, and when exactly
+  // one card fits, switch the entry over to it. Quantity, notes, location and photo are kept.
+  function manualMatches(e){
+    var p = { name:e.name, num:String(e.number), code:'' };
+    var a = getJSON(PTCG + '?q=' + encodeURIComponent('name:"' + e.name.replace(/["\\]/g, '') + '" number:' + p.num.replace(/[^a-z0-9]/ig, '').replace(/^0+(?=\d)/, '')) + '&pageSize=40&select=' + SEL)
+      .then(function(j){ return (j.data || []).map(fromPTCG); }).catch(function(){ return null; });
+    var b = searchTCGdex(p).then(function(list){
+      list = list.filter(function(c){ return !isPocket(c) && normName(c.name) === normName(e.name); }).slice(0, 8);
+      return Promise.all(list.map(completeTCGdex));
+    }).catch(function(){ return null; });
+    return Promise.all([a, b]).then(function(r){
+      if (r[0] === null && r[1] === null) return null;
+      var found = mergeResults(r[0] || [], r[1] || []).filter(function(c){
+        return normName(c.name) === normName(e.name) && numVal(c.number) === numVal(e.number);
+      });
+      if (e.setCode){ var sc = found.filter(function(c){ return String(c.setCode).toUpperCase() === e.setCode; }); if (sc.length) found = sc; }
+      if (e.printedTotal){ var pt = found.filter(function(c){ return +c.printedTotal === +e.printedTotal; }); if (pt.length) found = pt; }
+      else { var pr = found.filter(isPromo); if (pr.length) found = pr; }
+      return found;
+    });
+  }
+  function linkManual(quiet){
+    var todo = store.cards.concat(store.wants).filter(function(e){ return e.source === 'manual' && e.number && !(open && open.key === e.key); });
+    var names = uniq(todo.map(function(e){ return normName(e.name) + '|' + numVal(e.number) + '|' + (e.setCode || '') + '|' + (e.printedTotal || ''); }));
+    if (!names.length) return Promise.resolve({ linked:0, unsure:0, offline:0 });
+    var res = { linked:0, unsure:0, offline:0 };
+    return Promise.all(names.map(function(k){
+      var e = todo.find(function(x){ return normName(x.name) + '|' + numVal(x.number) + '|' + (x.setCode || '') + '|' + (x.printedTotal || '') === k; });
+      return manualMatches(e).then(function(found){
+        if (found === null){ res.offline++; return; }
+        if (found.length !== 1){ if (found.length > 1) res.unsure++; return; }
+        var f = found[0];
+        ['cards','wants'].forEach(function(list){
+          store[list].slice().forEach(function(old){
+            if (old.source !== 'manual' || normName(old.name) + '|' + numVal(old.number) + '|' + (old.setCode || '') + '|' + (old.printedTotal || '') !== k) return;
+            var key = f.cardId + '|' + old.variant;
+            var keep = { variant:old.variant, key:key, qty:old.qty || 1, notes:old.notes || '', added:old.added };
+            if (list === 'cards') keep.location = old.location || '';
+            if (old.photo) keep.photo = old.photo;
+            store[list] = store[list].filter(function(x){ return x !== old; });
+            var dup = store[list].find(function(x){ return x.key === key; });
+            if (dup){
+              if (list === 'cards') dup.qty += keep.qty;
+              ['notes','location','photo'].forEach(function(n){ if (keep[n] && !dup[n]) dup[n] = keep[n]; });
+            } else store[list].push(Object.assign(baseFields(f), keep));
+            res.linked++;
+          });
+        });
+      });
+    })).then(function(){
+      if (res.linked){ save(); render(); if (quiet) toast('Matched ' + res.linked + (res.linked === 1 ? ' card' : ' cards') + ' you added yourself with the card database'); }
+      return res;
+    });
+  }
+
+  function fillMissing(quiet, pre){
+    var all = store.cards.concat(store.wants).filter(function(c){ return c.source !== 'manual' && (quiet ? !c.evoKnown : (!c.setCode || !c.printedTotal || !c.mark || !c.setId || !c.evoKnown)); });
+    var lead = '';
+    if (pre && pre.linked) lead = 'Matched ' + pre.linked + (pre.linked === 1 ? ' card' : ' cards') + ' you added yourself. ';
+    if (pre && pre.unsure) lead += pre.unsure + (pre.unsure === 1 ? ' card you added matches' : ' cards you added match') + ' more than one database card; add a set code to ' + (pre.unsure === 1 ? 'it' : 'them') + '. ';
+    if (!all.length){ if (!quiet) toast(lead || 'All your cards already have full info'); return; }
     var ptcgIds = uniq(all.filter(function(c){ return c.source === 'ptcg'; }).map(function(c){ return rawId(c.cardId); }));
     var dexIds = uniq(all.filter(function(c){ return c.source === 'tcgdex'; }).map(function(c){ return c.cardId; }));
     var chunks = [];
@@ -1231,10 +1289,10 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
       if (updated) save(); render();
       if (quiet) return;
       var failed = r.filter(function(x){ return x === 'fail'; }).length;
-      toast(failed ? 'Updated ' + updated + ' cards. Some couldn\u2019t be reached; try again later.' : 'Updated ' + updated + (updated === 1 ? ' card' : ' cards'));
+      toast(lead + (failed ? 'Updated ' + updated + ' cards. Some couldn\u2019t be reached; try again later.' : 'Updated ' + updated + (updated === 1 ? ' card' : ' cards')));
     });
   }
-  $('refreshBtn').addEventListener('click', function(){ fillMissing(false); });
+  $('refreshBtn').addEventListener('click', function(){ toast('Updating\u2026'); linkManual(false).then(function(r){ fillMissing(false, r); }); });
 
   $('exportBtn').addEventListener('click', function(){
     var blob = new Blob([JSON.stringify(Object.assign({ version:2 }, store), null, 1)], { type:'application/json' });
@@ -1418,6 +1476,7 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
   setSyncStatus();
   syncNow();
   setTimeout(function(){ fillMissing(true); }, 4000);
+  setTimeout(function(){ linkManual(true); }, 7000);
   setTimeout(prefetchChains, 7000);
 })();
 </script>
