@@ -125,7 +125,7 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
 .energy .chip{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;color:var(--ink)}
 .energy .dot{width:10px;height:10px}
 .results{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px}
-.manualrow{margin:14px 0 0;color:var(--muted);font-size:.9rem}
+.manualrow{margin:0 0 12px;color:var(--muted);font-size:.9rem}
 .manualrow button{border:1px solid var(--line);background:var(--field);border-radius:10px;padding:9px 13px;margin-left:4px}
 .manual .pair{display:flex;gap:8px;max-width:420px}
 .manual .pair .field{flex:1}
@@ -232,8 +232,8 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
       <button class="chip" data-energy="Special">Special</button>
     </div>
     <p class="status" id="status">Search by name, like Pikachu. Add a number or set code to narrow it down, like Pikachu 25 or MEE 22. Tap a card to add it.</p>
+    <p class="manualrow" id="manualRow">Can’t find your card? <button type="button" id="manualBtn">Add it yourself</button></p>
     <div class="results" id="results"></div>
-    <p class="manualrow" id="manualRow" hidden>Can’t find your card? <button type="button" id="manualBtn">Add it yourself</button></p>
   </div>
 </dialog>
 
@@ -1083,7 +1083,6 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
     $('status').textContent = 'Searching\u2026';
     $('results').innerHTML = '';
     var codeIgnored = false;
-    $('manualRow').hidden = true;
     var dex = p.name ? searchTCGdex(p).catch(function(){ return null; }) : Promise.resolve([]);
     var ptcg = searchPTCG(p).then(function(res){
       if (res.length || !p.code || !p.name) return res;
@@ -1099,14 +1098,12 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
       lastResults = res;
       $('status').textContent = res.length
         ? res.length + (res.length >= 60 ? '+' : '') + ' found, newest first.' + (codeIgnored ? ' Set code ' + p.code + ' wasn\u2019t recognized, so it was left out.' : '') + ' Tap a card to add it.'
-        : 'No cards found for \u201c' + raw + '\u201d. Brand-new promos can take a while to reach the card databases. You can add it yourself below.';
+        : 'No cards found for \u201c' + raw + '\u201d. Brand-new promos can take a while to reach the card databases. Tap \u201cAdd it yourself\u201d to add it anyway.';
       renderResults();
-      $('manualRow').hidden = false;
     }).catch(function(){
       $('status').textContent = p.name
-        ? 'Couldn\u2019t reach the card databases. Check your internet connection and search again, or add the card yourself below.'
+        ? 'Couldn\u2019t reach the card databases. Check your internet connection and search again, or tap \u201cAdd it yourself.\u201d'
         : 'Couldn\u2019t search by set code right now. Try the card name instead.';
-      $('manualRow').hidden = !p.name;
     });
   });
   // Cards from the second database that the first one doesn't have yet (usually the newest
@@ -1337,7 +1334,7 @@ dialog::backdrop{background:rgba(8,12,20,.6)}
   document.querySelectorAll('[data-to]').forEach(function(b){ b.addEventListener('click', function(){ setAddTo(b.dataset.to); }); });
   $('addBtn').addEventListener('click', function(){
     setAddTo(ui.view === 'want' ? 'want' : 'binder');
-    $('q').value = ''; lastResults = []; $('results').innerHTML = ''; $('manualRow').hidden = true;
+    $('q').value = ''; lastResults = []; $('results').innerHTML = '';
     $('status').textContent = 'Search by name, like Pikachu. Add a number or set code to narrow it down, like Pikachu 25 or MEE 22. Tap a card to add it.';
     $('addDlg').showModal(); setTimeout(function(){ $('q').focus(); }, 50);
   });
